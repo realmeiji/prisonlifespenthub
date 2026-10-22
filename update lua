@@ -20,18 +20,22 @@ getgenv().SilentAimSettings = SilentAimSettings
 
 local ESPSettings = {
     Enabled = false,
-    Box = true,
-    Name = true,
-    Health = true,
-    Distance = true,
-    Tracer = false,
-    Skeleton = false,
+    Box = true, Name = true, Health = true, Distance = true,
+    Tracer = false, Skeleton = false,
     MaxDistance = 1000,
-    Color = Color3.fromRGB(120, 90, 255),
+    Color = Color3.fromRGB(140, 100, 255),
     TeamCheck = true,
     RenderFPS = 60
 }
-getgenv().ESPSettings = ESPSettings
+
+local Keybinds = {
+    SilentAim = Enum.KeyCode.RightAlt,
+    ESP = Enum.KeyCode.RightControl,
+    FOV = Enum.KeyCode.E
+}
+
+local Whitelist = {}
+local WhitelistIds = {}
 
 local MainFileName = "SpentHub"
 local Camera = workspace.CurrentCamera
@@ -157,6 +161,12 @@ local function getAimPosition()
     return Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
 end
 
+local function IsWhitelisted(Player)
+    if Whitelist[Player] then return true end
+    if WhitelistIds[Player.UserId] then return true end
+    return false
+end
+
 local function IsPlayerVisible(Player)
     local PC = Player.Character
     local LPC = LocalPlayer.Character
@@ -174,6 +184,7 @@ local function getClosestPlayer()
     for _, Player in next, GetPlayers(Players) do
         if Player == LocalPlayer then continue end
         if SilentAimSettings.TeamCheck and Player.Team == LocalPlayer.Team then continue end
+        if IsWhitelisted(Player) then continue end
         local Character = Player.Character
         if not Character then continue end
         if SilentAimSettings.VisibleCheck and not IsPlayerVisible(Player) then continue end
@@ -226,13 +237,11 @@ end
 
 local function updateESPPlayer(player)
     local d = ESPDrawings[player]
-    if not d then
-        d = createESPDrawings()
-        ESPDrawings[player] = d
-    end
+    if not d then d = createESPDrawings(); ESPDrawings[player] = d end
     local char = player.Character
     if not char then resetESPDrawings(d, false); return end
     if ESPSettings.TeamCheck and player.Team == LocalPlayer.Team then resetESPDrawings(d, false); return end
+    if IsWhitelisted(player) then resetESPDrawings(d, false); return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
     local head = char:FindFirstChild("Head")
@@ -240,10 +249,8 @@ local function updateESPPlayer(player)
     local camPos = Camera.CFrame.Position
     local dist = (hrp.Position - camPos).Magnitude
     if dist > ESPSettings.MaxDistance then resetESPDrawings(d, false); return end
-    local topPos = head.Position + Vector3.new(0, 0.5, 0)
-    local bottomPos = hrp.Position - Vector3.new(0, 3, 0)
-    local topScreen, topOn = WorldToViewportPoint(Camera, topPos)
-    local bottomScreen, bottomOn = WorldToViewportPoint(Camera, bottomPos)
+    local topScreen, topOn = WorldToViewportPoint(Camera, head.Position + Vector3.new(0, 0.5, 0))
+    local bottomScreen, bottomOn = WorldToViewportPoint(Camera, hrp.Position - Vector3.new(0, 3, 0))
     if not topOn or not bottomOn then resetESPDrawings(d, false); return end
     local height = math.abs(topScreen.Y - bottomScreen.Y)
     local width = height * 0.6
@@ -264,7 +271,7 @@ local function updateESPPlayer(player)
     d.name.OutlineColor = Color3.fromRGB(0, 0, 0)
     d.name.Text = player.Name
     d.name.Position = Vector2.new(topScreen.X, y - 18)
-    local healthPct = hum.Health / hum.MaxHealth
+    local hp = hum.Health / hum.MaxHealth
     d.healthBg.Visible = ESPSettings.Health
     d.healthBg.Color = Color3.fromRGB(0, 0, 0)
     d.healthBg.Thickness = 1
@@ -275,8 +282,8 @@ local function updateESPPlayer(player)
     d.healthBar.Color = Color3.fromRGB(70, 210, 130)
     d.healthBar.Thickness = 1
     d.healthBar.Filled = true
-    d.healthBar.Size = Vector2.new(3, height * healthPct)
-    d.healthBar.Position = Vector2.new(x - 7, y + height * (1 - healthPct))
+    d.healthBar.Size = Vector2.new(3, height * hp)
+    d.healthBar.Position = Vector2.new(x - 7, y + height * (1 - hp))
     d.distance.Visible = ESPSettings.Distance
     d.distance.Color = Color3.fromRGB(180, 180, 200)
     d.distance.Size = 11
@@ -292,9 +299,7 @@ local function updateESPPlayer(player)
         d.tracer.Transparency = 0.5
         d.tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
         d.tracer.To = Vector2.new(topScreen.X, topScreen.Y)
-    else
-        d.tracer.Visible = false
-    end
+    else d.tracer.Visible = false end
     if ESPSettings.Skeleton then
         local bones = {
             {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
@@ -306,8 +311,7 @@ local function updateESPPlayer(player)
         for i, pair in ipairs(bones) do
             if not d.skeletonLines[i] then d.skeletonLines[i] = Drawing.new("Line") end
             local line = d.skeletonLines[i]
-            local a = char:FindFirstChild(pair[1])
-            local b = char:FindFirstChild(pair[2])
+            local a, b = char:FindFirstChild(pair[1]), char:FindFirstChild(pair[2])
             if a and b then
                 local aPos, aOn = WorldToViewportPoint(Camera, a.Position)
                 local bPos, bOn = WorldToViewportPoint(Camera, b.Position)
@@ -321,16 +325,12 @@ local function updateESPPlayer(player)
                 else line.Visible = false end
             else line.Visible = false end
         end
-    else
-        for _, line in pairs(d.skeletonLines) do line.Visible = false end
-    end
+    else for _, line in pairs(d.skeletonLines) do line.Visible = false end end
 end
 
 local function cleanupAllESP()
-    for player, d in pairs(ESPdrawings or {}) do
-        cleanupESPDrawings(d)
-    end
-    ESPDrawings = {}
+    for player, d in pairs(ESPdrawings or {}) do cleanupESPDrawings(d) end
+    ESPdrawings = {}
 end
 
 local lastESPRender = 0
@@ -345,54 +345,146 @@ SG.DisplayOrder = 999
 SG.Parent = game:GetService("CoreGui")
 
 local T = {
-    Bg = Color3.fromRGB(6, 6, 10),
-    Panel = Color3.fromRGB(14, 14, 20),
-    PanelLight = Color3.fromRGB(22, 22, 30),
-    PanelHover = Color3.fromRGB(30, 30, 40),
-    Accent = Color3.fromRGB(120, 90, 255),
-    Accent2 = Color3.fromRGB(200, 80, 255),
+    Bg = Color3.fromRGB(5, 5, 9),
+    Panel = Color3.fromRGB(13, 13, 19),
+    PanelLight = Color3.fromRGB(21, 21, 29),
+    PanelHover = Color3.fromRGB(30, 30, 42),
+    Accent = Color3.fromRGB(140, 100, 255),
+    Accent2 = Color3.fromRGB(220, 80, 255),
     Accent3 = Color3.fromRGB(60, 180, 255),
-    Text = Color3.fromRGB(245, 245, 250),
-    TextDim = Color3.fromRGB(120, 120, 140),
+    Text = Color3.fromRGB(248, 248, 252),
+    TextDim = Color3.fromRGB(115, 115, 140),
     Green = Color3.fromRGB(70, 210, 130),
     Red = Color3.fromRGB(230, 80, 80),
-    Stroke = Color3.fromRGB(45, 45, 60),
-    StrokeLight = Color3.fromRGB(70, 70, 90)
+    Stroke = Color3.fromRGB(45, 45, 62),
+    StrokeLight = Color3.fromRGB(75, 75, 95)
 }
 
--- responsive size calc
 local function calcSize()
     local vpX, vpY = Camera.ViewportSize.X, Camera.ViewportSize.Y
     local land = vpX > vpY
-    local baseW = land and math.clamp(vpX * 0.7, 500, 820) or math.clamp(vpX * 0.92, 340, 480)
-    local baseH = land and math.clamp(vpY * 0.88, 300, 520) or math.clamp(vpY * 0.78, 420, 700)
-    return baseW, baseH, land
+    local w = land and math.clamp(vpX * 0.72, 520, 840) or math.clamp(vpX * 0.94, 350, 500)
+    local h = land and math.clamp(vpY * 0.90, 320, 540) or math.clamp(vpY * 0.80, 440, 720)
+    return w, h, land
 end
 
 local uiW, uiH, isLandscape = calcSize()
 
+-- LOADING SCREEN
+local loadingScreen = Instance.new("Frame")
+loadingScreen.Size = UDim2.new(0, uiW, 0, uiH)
+loadingScreen.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
+loadingScreen.BackgroundColor3 = T.Bg
+loadingScreen.BackgroundTransparency = 0.02
+loadingScreen.BorderSizePixel = 0
+loadingScreen.ZIndex = 100
+loadingScreen.Parent = SG
+Instance.new("UICorner", loadingScreen).CornerRadius = UDim.new(0, 18)
+local loadStroke = Instance.new("UIStroke", loadingScreen)
+loadStroke.Color = T.Accent
+loadStroke.Thickness = 1
+loadStroke.Transparency = 0.3
+
+local loadGlow = Instance.new("Frame")
+loadGlow.Size = UDim2.new(1, 30, 1, 30)
+loadGlow.Position = UDim2.new(0, -15, 0, -15)
+loadGlow.BackgroundColor3 = T.Accent
+loadGlow.BackgroundTransparency = 0.8
+loadGlow.BorderSizePixel = 0
+loadGlow.ZIndex = 99
+loadGlow.Parent = loadingScreen
+Instance.new("UICorner", loadGlow).CornerRadius = UDim.new(0, 24)
+TweenService:Create(loadGlow, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+    {BackgroundTransparency = 0.55}):Play()
+
+local loadRing = Instance.new("Frame")
+loadRing.Size = UDim2.new(0, 70, 0, 70)
+loadRing.Position = UDim2.new(0.5, -35, 0.5, -70)
+loadRing.BackgroundTransparency = 1
+loadRing.ZIndex = 101
+loadRing.Parent = loadingScreen
+local ringStroke = Instance.new("UIStroke", loadRing)
+ringStroke.Color = T.Accent
+ringStroke.Thickness = 3
+ringStroke.Transparency = 0.2
+Instance.new("UICorner", loadRing).CornerRadius = UDim.new(1, 0)
+
+local loadText = Instance.new("TextLabel")
+loadText.Size = UDim2.new(1, 0, 0, 30)
+loadText.Position = UDim2.new(0, 0, 0.5, 20)
+loadText.Text = "LOADING SPENT HUB..."
+loadText.TextColor3 = T.Text
+loadText.BackgroundTransparency = 1
+loadText.Font = Enum.Font.GothamBold
+loadText.TextSize = 13
+loadText.ZIndex = 101
+loadText.Parent = loadingScreen
+
+-- typing effect
+task.spawn(function()
+    local txt = "LOADING SPENT HUB..."
+    while loadText.Parent and loadText.Text ~= txt do
+        for i = 1, #txt do
+            loadText.Text = txt:sub(1, i)
+            task.wait(0.03)
+        end
+        task.wait(0.2)
+    end
+end)
+
+local loadProgress = Instance.new("Frame")
+loadProgress.Size = UDim2.new(0, 200, 0, 3)
+loadProgress.Position = UDim2.new(0.5, -100, 0.5, 60)
+loadProgress.BackgroundColor3 = T.PanelLight
+loadProgress.BorderSizePixel = 0
+loadProgress.ZIndex = 101
+loadProgress.Parent = loadingScreen
+Instance.new("UICorner", loadProgress).CornerRadius = UDim.new(1, 0)
+
+local loadFill = Instance.new("Frame")
+loadFill.Size = UDim2.new(0, 0, 1, 0)
+loadFill.BackgroundColor3 = T.Accent
+loadFill.BorderSizePixel = 0
+loadFill.ZIndex = 102
+loadFill.Parent = loadProgress
+Instance.new("UICorner", loadFill).CornerRadius = UDim.new(1, 0)
+local loadFillGrad = Instance.new("UIGradient")
+loadFillGrad.Color = ColorSequence.new(T.Accent, T.Accent2)
+loadFillGrad.Parent = loadFill
+
+task.spawn(function()
+    local rot = 0
+    while loadRing.Parent do
+        rot = (rot + 6) % 360
+        loadRing.Rotation = rot
+        task.wait(0.02)
+    end
+end)
+
+TweenService:Create(loadFill, TweenInfo.new(5, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 1, 0)}):Play()
+
+-- MAIN FRAME (hidden initially)
 local Main = Instance.new("Frame")
 Main.Size = UDim2.new(0, uiW, 0, uiH)
 Main.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
 Main.BackgroundColor3 = T.Bg
 Main.BackgroundTransparency = 0.02
 Main.BorderSizePixel = 0
+Main.Visible = false
 Main.Parent = SG
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 18)
-mainCorner.Parent = Main
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 18)
 
 local glow = Instance.new("Frame")
-glow.Size = UDim2.new(1, 28, 1, 28)
-glow.Position = UDim2.new(0, -14, 0, -14)
+glow.Size = UDim2.new(1, 32, 1, 32)
+glow.Position = UDim2.new(0, -16, 0, -16)
 glow.BackgroundColor3 = T.Accent
 glow.BackgroundTransparency = 0.85
 glow.BorderSizePixel = 0
 glow.ZIndex = 0
 glow.Parent = Main
-Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 26)
+Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 28)
 TweenService:Create(glow, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-    {BackgroundTransparency = 0.6, Size = UDim2.new(1, 40, 1, 40), Position = UDim2.new(0, -20, 0, -20)}):Play()
+    {BackgroundTransparency = 0.55, Size = UDim2.new(1, 44, 1, 44), Position = UDim2.new(0, -22, 0, -22)}):Play()
 
 local stroke = Instance.new("UIStroke", Main)
 stroke.Color = T.StrokeLight
@@ -409,9 +501,9 @@ aurora.Parent = Main
 Instance.new("UICorner", aurora).CornerRadius = UDim.new(0, 18)
 local auroraGrad = Instance.new("UIGradient")
 auroraGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(40, 25, 70)),
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 25, 80)),
     ColorSequenceKeypoint.new(0.35, Color3.fromRGB(10, 10, 20)),
-    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(55, 25, 80)),
+    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(60, 25, 90)),
     ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 30))
 })
 auroraGrad.Rotation = 45
@@ -423,7 +515,6 @@ task.spawn(function()
     end
 end)
 
--- scanlines
 local scan = Instance.new("Frame")
 scan.Size = UDim2.new(1, 0, 1, 0)
 scan.BackgroundTransparency = 1
@@ -442,7 +533,6 @@ for i = 0, 60 do
     line.Parent = scan
 end
 
--- noise
 local noise = Instance.new("Frame")
 noise.Size = UDim2.new(1, 0, 1, 0)
 noise.BackgroundTransparency = 1
@@ -450,7 +540,7 @@ noise.ZIndex = 2
 noise.ClipsDescendants = true
 noise.Parent = Main
 Instance.new("UICorner", noise).CornerRadius = UDim.new(0, 18)
-for i = 1, 160 do
+for i = 1, 180 do
     local dot = Instance.new("Frame")
     dot.Size = UDim2.new(0, 1, 0, 1)
     dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
@@ -461,7 +551,6 @@ for i = 1, 160 do
     dot.Parent = noise
 end
 
--- light sweep
 local sweep = Instance.new("Frame")
 sweep.Size = UDim2.new(0.18, 0, 1.6, 0)
 sweep.Position = UDim2.new(-0.4, 0, -0.3, 0)
@@ -480,12 +569,22 @@ task.spawn(function()
     end
 end)
 
--- ================= NOTIFICATION SYSTEM =================
+-- cursor spotlight
+local spotlight = Instance.new("Frame")
+spotlight.Size = UDim2.new(0, 300, 0, 300)
+spotlight.BackgroundColor3 = T.Accent
+spotlight.BackgroundTransparency = 0.95
+spotlight.BorderSizePixel = 0
+spotlight.ZIndex = 3
+spotlight.Parent = Main
+Instance.new("UICorner", spotlight).CornerRadius = UDim.new(1, 0)
+
+-- NOTIFICATIONS
 local notifContainer = Instance.new("Frame")
-notifContainer.Size = UDim2.new(0, 320, 1, -80)
-notifContainer.Position = UDim2.new(1, -340, 0, 60)
+notifContainer.Size = UDim2.new(0, 340, 1, -80)
+notifContainer.Position = UDim2.new(1, -360, 0, 60)
 notifContainer.BackgroundTransparency = 1
-notifContainer.ZIndex = 50
+notifContainer.ZIndex = 200
 notifContainer.Parent = SG
 local notifLayout = Instance.new("UIListLayout", notifContainer)
 notifLayout.Padding = UDim.new(0, 8)
@@ -494,30 +593,27 @@ notifLayout.HorizontalAlignment = Enum.HorizontalAlignment.Right
 
 local function notify(title, text, type)
     local color = type == "success" and T.Green or type == "error" and T.Red or T.Accent
-    
     local n = Instance.new("Frame")
-    n.Size = UDim2.new(1, 0, 0, 70)
-    n.Position = UDim2.new(1, 340, 0, 0)
+    n.Size = UDim2.new(1, 0, 0, 72)
+    n.Position = UDim2.new(1, 360, 0, 0)
     n.BackgroundColor3 = T.Panel
     n.BackgroundTransparency = 0.05
     n.BorderSizePixel = 0
-    n.ZIndex = 51
+    n.ZIndex = 201
     n.Parent = notifContainer
     Instance.new("UICorner", n).CornerRadius = UDim.new(0, 12)
     local nStroke = Instance.new("UIStroke", n)
     nStroke.Color = color
     nStroke.Thickness = 1
     nStroke.Transparency = 0.4
-
     local accent = Instance.new("Frame")
     accent.Size = UDim2.new(0, 4, 1, -16)
     accent.Position = UDim2.new(0, 8, 0, 8)
     accent.BackgroundColor3 = color
     accent.BorderSizePixel = 0
-    accent.ZIndex = 52
+    accent.ZIndex = 202
     accent.Parent = n
     Instance.new("UICorner", accent).CornerRadius = UDim.new(1, 0)
-
     local t = Instance.new("TextLabel")
     t.Size = UDim2.new(1, -30, 0, 22)
     t.Position = UDim2.new(0, 20, 0, 8)
@@ -527,9 +623,8 @@ local function notify(title, text, type)
     t.Font = Enum.Font.GothamBold
     t.TextSize = 12
     t.TextXAlignment = Enum.TextXAlignment.Left
-    t.ZIndex = 52
+    t.ZIndex = 202
     t.Parent = n
-
     local txt = Instance.new("TextLabel")
     txt.Size = UDim2.new(1, -30, 0, 32)
     txt.Position = UDim2.new(0, 20, 0, 30)
@@ -541,19 +636,18 @@ local function notify(title, text, type)
     txt.TextWrapped = true
     txt.TextXAlignment = Enum.TextXAlignment.Left
     txt.TextYAlignment = Enum.TextYAlignment.Top
-    txt.ZIndex = 52
+    txt.ZIndex = 202
     txt.Parent = n
-
     TweenService:Create(n, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {Position = UDim2.new(0, 0, 0, 0)}):Play()
     task.delay(3.5, function()
-        TweenService:Create(n, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(1, 340, 0, 0)}):Play()
+        TweenService:Create(n, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {Position = UDim2.new(1, 360, 0, 0)}):Play()
         task.wait(0.35)
         n:Destroy()
     end)
 end
 getgenv().SpentHubNotify = notify
 
--- ================= TITLE BAR =================
+-- TITLE BAR
 local Title = Instance.new("Frame")
 Title.Size = UDim2.new(1, 0, 0, 48)
 Title.BackgroundColor3 = T.Panel
@@ -610,7 +704,7 @@ end)
 local deviceText = Instance.new("TextLabel")
 deviceText.Size = UDim2.new(0, 200, 1, 0)
 deviceText.Position = UDim2.new(1, -420, 0, 0)
-deviceText.Text = (isPC and "PC" or isMobile and "Mobile" or isHybrid and "Hybrid" or "Unknown") .. " | " .. (isLandscape and "Landscape" or "Portrait")
+deviceText.Text = (isPC and "PC" or isMobile and "Mobile" or "Hybrid") .. " | " .. (isLandscape and "Landscape" or "Portrait")
 deviceText.TextColor3 = T.TextDim
 deviceText.BackgroundTransparency = 1
 deviceText.Font = Enum.Font.Gotham
@@ -644,12 +738,13 @@ Close.Parent = Title
 Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
 Close.MouseButton1Click:Connect(function()
     cleanupAllESP()
-    notify("Spent Hub", "Unloaded successfully", "error")
-    TweenService:Create(Main, TweenInfo.new(0.25, Enum.EasingStyle.Quad), {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0)}):Play()
+    notify("Spent Hub", "Hub closed", "error")
+    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1}):Play()
     task.wait(0.3)
     SG:Destroy()
 end)
 
+-- drag
 local dragging, dragStart, frameStart
 Title.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
@@ -664,13 +759,17 @@ Title.InputChanged:Connect(function(i)
 end)
 Title.InputEnded:Connect(function() dragging = false end)
 
+-- parallax + spotlight
 UserInputService.InputChanged:Connect(function(i)
     if i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
-    local relX = (i.Position.X - Main.AbsolutePosition.X) / math.max(Main.AbsoluteSize.X, 1)
-    local relY = (i.Position.Y - Main.AbsolutePosition.Y) / math.max(Main.AbsoluteSize.Y, 1)
+    local absX, absY = Main.AbsolutePosition.X, Main.AbsolutePosition.Y
+    local wX, wY = Main.AbsoluteSize.X, Main.AbsoluteSize.Y
+    local relX = (i.Position.X - absX) / math.max(wX, 1)
+    local relY = (i.Position.Y - absY) / math.max(wY, 1)
     if relX > -0.15 and relX < 1.15 and relY > -0.15 and relY < 1.15 then
         auroraGrad.Rotation = 45 + relX * 80
-        glow.Position = UDim2.new(0, -14 + relX * 5, 0, -14 + relY * 5)
+        glow.Position = UDim2.new(0, -16 + relX * 6, 0, -16 + relY * 6)
+        spotlight.Position = UDim2.new(relX, -150, relY, -150)
     end
 end)
 
@@ -679,9 +778,11 @@ local fullSize = UDim2.new(0, uiW, 0, uiH)
 MinBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     MinBtn.Text = minimized and "+" or "—"
-    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Size = minimized and UDim2.new(0, uiW, 0, 48) or fullSize}):Play()
+    notify("Spent Hub", minimized and "Minimized" or "Restored", "default")
+    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = minimized and UDim2.new(0, uiW, 0, 48) or fullSize}):Play()
 end)
 
+-- BODY
 local Body = Instance.new("Frame")
 Body.Size = isLandscape and UDim2.new(1, 0, 1, -48) or UDim2.new(1, 0, 1, -108)
 Body.Position = UDim2.new(0, 0, 0, 48)
@@ -791,12 +892,12 @@ local function makeTab(name, page, order)
     tabs[name] = {button = b, indicator = indicator, page = page}
     b.MouseEnter:Connect(function()
         if not tabs[name].indicator.Visible then
-            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.PanelLight}):Play()
+            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.PanelLight, Size = isLandscape and UDim2.new(1, -16, 0, 46) or UDim2.new(0, 102, 1, -8)}):Play()
         end
     end)
     b.MouseLeave:Connect(function()
         if not tabs[name].indicator.Visible then
-            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.Bg}):Play()
+            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.Bg, Size = isLandscape and UDim2.new(1, -16, 0, 44) or UDim2.new(0, 100, 1, -8)}):Play()
         end
     end)
     b.MouseButton1Click:Connect(function()
@@ -1055,21 +1156,72 @@ local function newCycle(parent, label, options, def, order, cb)
 end
 
 newLabel(CombatPage, "SILENT AIM", 1, true)
-local enabledToggle = newToggle(CombatPage, "Enable Silent Aim", 2, false, function(v)
+local enabledToggle = newToggle(CombatPage, "Enable Silent Aim (RightAlt)", 2, false, function(v)
     SilentAimSettings.Enabled = v
     mouse_box.Visible = v and SilentAimSettings.ShowSilentAimTarget
     notify("Silent Aim", v and "Enabled" or "Disabled", v and "success" or "error")
 end)
-newToggle(CombatPage, "Team Check", 3, false, function(v) SilentAimSettings.TeamCheck = v end)
-newToggle(CombatPage, "Visible Check", 4, false, function(v) SilentAimSettings.VisibleCheck = v end)
+newToggle(CombatPage, "Team Check", 3, false, function(v)
+    SilentAimSettings.TeamCheck = v
+    notify("Team Check", v and "Enabled" or "Disabled", v and "success" or "error")
+end)
+newToggle(CombatPage, "Visible Check", 4, false, function(v)
+    SilentAimSettings.VisibleCheck = v
+    notify("Visible Check", v and "Enabled" or "Disabled", v and "success" or "error")
+end)
 newCycle(CombatPage, "Target Part", {"Head","HumanoidRootPart","Random"}, "HumanoidRootPart", 5, function(v) SilentAimSettings.TargetPart = v end)
 newCycle(CombatPage, "Method", {"Raycast","FindPartOnRay","FindPartOnRayWithWhitelist","FindPartOnRayWithIgnoreList","Mouse.Hit/Target"}, "Raycast", 6, function(v) SilentAimSettings.SilentAimMethod = v end)
 newSlider(CombatPage, "Hit Chance", 0, 100, 100, 7, function(v) SilentAimSettings.HitChance = v end)
+newLabel(CombatPage, "WHITELIST", 8, true)
+
+local wlInput = Instance.new("TextBox")
+wlInput.Size = UDim2.new(1, -16, 0, 40)
+wlInput.BackgroundColor3 = T.PanelLight
+wlInput.TextColor3 = T.Text
+wlInput.PlaceholderText = "Enter username to whitelist"
+wlInput.PlaceholderColor3 = T.TextDim
+wlInput.Text = ""
+wlInput.Font = Enum.Font.Gotham
+wlInput.TextSize = 12
+wlInput.BorderSizePixel = 0
+wlInput.LayoutOrder = 9
+wlInput.ZIndex = 7
+wlInput.Parent = CombatPage
+Instance.new("UICorner", wlInput).CornerRadius = UDim.new(0, 10)
+
+local wlBtn = Instance.new("TextButton")
+wlBtn.Size = UDim2.new(1, -16, 0, 40)
+wlBtn.BackgroundColor3 = T.PanelLight
+wlBtn.Text = "Add to Whitelist"
+wlBtn.TextColor3 = T.Text
+wlBtn.Font = Enum.Font.GothamSemibold
+wlBtn.TextSize = 12
+wlBtn.BorderSizePixel = 0
+wlBtn.LayoutOrder = 10
+wlBtn.ZIndex = 7
+wlBtn.Parent = CombatPage
+Instance.new("UICorner", wlBtn).CornerRadius = UDim.new(0, 10)
+wlBtn.MouseButton1Click:Connect(function()
+    local name = wlInput.Text
+    if name and #name > 0 then
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower() == name:lower() then
+                Whitelist[p] = true
+                WhitelistIds[p.UserId] = true
+                notify("Whitelist", "Added: " .. p.Name, "success")
+                wlInput.Text = ""
+                return
+            end
+        end
+        notify("Whitelist", "Player not found", "error")
+    end
+end)
 
 newLabel(VisualPage, "FIELD OF VIEW", 1, true)
-newToggle(VisualPage, "Show FOV Circle", 2, false, function(v)
+newToggle(VisualPage, "Show FOV Circle (E)", 2, false, function(v)
     SilentAimSettings.FOVVisible = v
     fov_circle.Visible = v
+    notify("FOV Circle", v and "Enabled" or "Disabled", v and "success" or "error")
 end)
 newSlider(VisualPage, "FOV Radius", 0, 360, 130, 3, function(v)
     SilentAimSettings.FOVRadius = v
@@ -1087,7 +1239,7 @@ newSlider(VisualPage, "Prediction Amount", 16, 100, 16, 7, function(v)
 end)
 
 newLabel(ESPPage, "ESP SYSTEM", 1, true)
-newToggle(ESPPage, "Enable ESP", 2, false, function(v)
+newToggle(ESPPage, "Enable ESP (RightCtrl)", 2, false, function(v)
     ESPSettings.Enabled = v
     notify("ESP", v and "Enabled" or "Disabled", v and "success" or "error")
     if not v then
@@ -1170,6 +1322,23 @@ loadBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- keybinds
+UserInputService.InputBegan:Connect(function(i, gp)
+    if gp then return end
+    if i.KeyCode == Keybinds.SilentAim then
+        SilentAimSettings.Enabled = not SilentAimSettings.Enabled
+        enabledToggle.set(SilentAimSettings.Enabled)
+        notify("Keybind", "Silent Aim: " .. (SilentAimSettings.Enabled and "ON" or "OFF"), SilentAimSettings.Enabled and "success" or "error")
+    elseif i.KeyCode == Keybinds.ESP then
+        ESPSettings.Enabled = not ESPSettings.Enabled
+        notify("Keybind", "ESP: " .. (ESPSettings.Enabled and "ON" or "OFF"), ESPSettings.Enabled and "success" or "error")
+    elseif i.KeyCode == Keybinds.FOV then
+        SilentAimSettings.FOVVisible = not SilentAimSettings.FOVVisible
+        fov_circle.Visible = SilentAimSettings.FOVVisible
+        notify("Keybind", "FOV Circle: " .. (SilentAimSettings.FOVVisible and "ON" or "OFF"), SilentAimSettings.FOVVisible and "success" or "error")
+    end
+end)
+
 -- silent aim loop
 RenderStepped:Connect(function()
     if SilentAimSettings.Enabled and SilentAimSettings.ShowSilentAimTarget then
@@ -1179,9 +1348,7 @@ RenderStepped:Connect(function()
             local pos, onScreen = WorldToViewportPoint(Camera, Root.Position)
             mouse_box.Visible = onScreen
             if onScreen then mouse_box.Position = Vector2.new(pos.X, pos.Y) end
-        else
-            mouse_box.Visible = false
-        end
+        else mouse_box.Visible = false end
     elseif not SilentAimSettings.Enabled then
         mouse_box.Visible = false
     end
@@ -1213,7 +1380,7 @@ Heartbeat:Connect(function()
     end
 end)
 
--- hooks
+-- hooks (untouched silent aim core)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -1279,7 +1446,7 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     return oldIndex(self, Index)
 end))
 
--- responsive re-layout
+-- re-layout
 Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     local newW, newH, land = calcSize()
     uiW, uiH, isLandscape = newW, newH, land
@@ -1288,6 +1455,26 @@ Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     fullSize = UDim2.new(0, uiW, 0, uiH)
 end)
 
-notify("Spent Hub", "Loaded successfully | " .. (isPC and "PC" or isMobile and "Mobile" or "Hybrid") .. " mode", "success")
+-- 5 SECOND LOADING SEQUENCE
+task.spawn(function()
+    task.wait(5)
+    if loadingScreen.Parent then
+        notify("Spent Hub", "Loaded successfully | " .. (isPC and "PC" or isMobile and "Mobile" or "Hybrid"), "success")
+        TweenService:Create(loadingScreen, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+            Size = UDim2.new(0, 0, 0, 0),
+            Position = UDim2.new(0.5, 0, 0.5, 0),
+            BackgroundTransparency = 1
+        }):Play()
+        task.wait(0.4)
+        loadingScreen:Destroy()
+        Main.Visible = true
+        Main.Size = UDim2.new(0, 0, 0, 0)
+        Main.Position = UDim2.new(0.5, 0, 0.5, 0)
+        TweenService:Create(Main, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+            Size = fullSize,
+            Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
+        }):Play()
+    end
+end)
 
-print("Spent Hub v2.0 loaded | Silent Aim + ESP + Premium GUI + Notifications")
+print("Spent Hub v3.0 loaded | Silent Aim + ESP + Whitelist + Keybinds + Premium UI")
