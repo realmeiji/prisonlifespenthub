@@ -3,7 +3,7 @@ if not syn or not protectgui then getgenv().protectgui = function() end end
 
 local SilentAimSettings = {
     Enabled = false,
-    ClassName = "Spent Hub Silent Aim",
+    ClassName = "Universal Silent Aim - Averiias, Stefanuk12, xaxa",
     ToggleKey = "RightAlt",
     TeamCheck = false,
     VisibleCheck = false,
@@ -21,24 +21,25 @@ getgenv().SilentAimSettings = SilentAimSettings
 local ESPSettings = {
     Enabled = false,
     Box = true, Name = true, Health = true, Distance = true,
-    Tracer = false, Skeleton = false, Chams = false,
+    Tracer = false, Skeleton = false,
     MaxDistance = 1000,
-    Color = Color3.fromRGB(140, 100, 255),
+    Color = Color3.fromRGB(255, 182, 213),
     TeamCheck = true,
     RenderFPS = 60
 }
 
-local Keybinds = {
+local KeybindSettings = {
     SilentAim = Enum.KeyCode.RightAlt,
     ESP = Enum.KeyCode.RightControl,
     FOV = Enum.KeyCode.E,
-    HideUI = Enum.KeyCode.RightShift
+    UI = Enum.KeyCode.RightShift
 }
 
 local Whitelist = {}
 local WhitelistIds = {}
 
-local MainFileName = "SpentHub"
+local MainFileName = "UniversalSilentAim"
+local FileToSave = ""
 local Camera = workspace.CurrentCamera
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -46,7 +47,6 @@ local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
-local Lighting = game:GetService("Lighting")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local GetPlayers = Players.GetPlayers
@@ -67,10 +67,11 @@ local isMobile = hasTouch and not hasKeyboard
 local isPC = hasKeyboard and hasMouse
 local isHybrid = hasTouch and hasKeyboard and hasMouse
 
+-- Drawings
 local mouse_box = Drawing.new("Square")
 mouse_box.Visible = false
 mouse_box.ZIndex = 999
-mouse_box.Color = Color3.fromRGB(120, 90, 255)
+mouse_box.Color = Color3.fromRGB(255, 182, 213)
 mouse_box.Thickness = 2
 mouse_box.Size = Vector2.new(24, 24)
 mouse_box.Filled = false
@@ -83,7 +84,7 @@ fov_circle.Filled = false
 fov_circle.Visible = false
 fov_circle.ZIndex = 999
 fov_circle.Transparency = 0.85
-fov_circle.Color = Color3.fromRGB(120, 90, 255)
+fov_circle.Color = Color3.fromRGB(255, 182, 213)
 
 local ESPDrawings = {}
 
@@ -100,6 +101,7 @@ local function CalculateChance(Percentage)
     return chance <= Percentage / 100
 end
 
+-- File handling
 if not isfolder(MainFileName) then makefolder(MainFileName) end
 if not isfolder(string.format("%s/%s", MainFileName, tostring(game.PlaceId))) then
     makefolder(string.format("%s/%s", MainFileName, tostring(game.PlaceId)))
@@ -203,6 +205,7 @@ local function getClosestPlayer()
     return Closest
 end
 
+-- ESP
 local function createESPDrawings()
     return {
         box = Drawing.new("Square"),
@@ -279,13 +282,13 @@ local function updateESPPlayer(player)
     d.healthBg.Size = Vector2.new(5, height + 2)
     d.healthBg.Position = Vector2.new(x - 8, y - 1)
     d.healthBar.Visible = ESPSettings.Health
-    d.healthBar.Color = Color3.fromRGB(70, 210, 130)
+    d.healthBar.Color = Color3.fromRGB(255, 105, 180)
     d.healthBar.Thickness = 1
     d.healthBar.Filled = true
     d.healthBar.Size = Vector2.new(3, height * hp)
     d.healthBar.Position = Vector2.new(x - 7, y + height * (1 - hp))
     d.distance.Visible = ESPSettings.Distance
-    d.distance.Color = Color3.fromRGB(180, 180, 200)
+    d.distance.Color = Color3.fromRGB(255, 200, 220)
     d.distance.Size = 11
     d.distance.Center = true
     d.distance.Outline = true
@@ -336,29 +339,29 @@ end
 local lastESPRender = 0
 local espFrameInterval = 1 / ESPSettings.RenderFPS
 
--- ================= THEME =================
+-- ================= LIGHT PINK THEME =================
 local T = {
-    Bg = Color3.fromRGB(5, 5, 8),
-    Panel = Color3.fromRGB(12, 12, 18),
-    PanelLight = Color3.fromRGB(20, 20, 28),
-    PanelHover = Color3.fromRGB(30, 30, 42),
-    Accent = Color3.fromRGB(150, 105, 255),
-    Accent2 = Color3.fromRGB(230, 90, 255),
-    Accent3 = Color3.fromRGB(70, 190, 255),
-    Text = Color3.fromRGB(250, 250, 255),
-    TextDim = Color3.fromRGB(120, 120, 145),
-    Green = Color3.fromRGB(70, 220, 140),
-    Red = Color3.fromRGB(240, 85, 85),
-    Stroke = Color3.fromRGB(48, 48, 65),
-    StrokeLight = Color3.fromRGB(80, 80, 100)
+    Bg = Color3.fromRGB(12, 10, 15),
+    Panel = Color3.fromRGB(20, 17, 24),
+    PanelLight = Color3.fromRGB(30, 25, 35),
+    PanelHover = Color3.fromRGB(40, 33, 47),
+    Accent = Color3.fromRGB(255, 182, 213),      -- light pink
+    Accent2 = Color3.fromRGB(255, 140, 190),     -- deeper pink
+    Accent3 = Color3.fromRGB(255, 200, 225),     -- pale pink
+    Text = Color3.fromRGB(250, 245, 250),
+    TextDim = Color3.fromRGB(160, 150, 165),
+    Green = Color3.fromRGB(180, 230, 200),
+    Red = Color3.fromRGB(255, 130, 160),
+    Stroke = Color3.fromRGB(60, 50, 65),
+    StrokeLight = Color3.fromRGB(90, 75, 100)
 }
 local CORNER = UDim.new(0, 20)
 
 local function calcSize()
     local vpX, vpY = Camera.ViewportSize.X, Camera.ViewportSize.Y
     local land = vpX > vpY
-    local w = land and math.clamp(vpX * 0.75, 560, 900) or math.clamp(vpX * 0.95, 360, 500)
-    local h = land and math.clamp(vpY * 0.92, 340, 560) or math.clamp(vpY * 0.82, 460, 740)
+    local w = land and math.clamp(vpX * 0.72, 540, 860) or math.clamp(vpX * 0.94, 350, 490)
+    local h = land and math.clamp(vpY * 0.90, 340, 540) or math.clamp(vpY * 0.80, 440, 720)
     return w, h, land
 end
 local uiW, uiH, isLandscape = calcSize()
@@ -371,46 +374,11 @@ SG.IgnoreGuiInset = true
 SG.DisplayOrder = 999
 SG.Parent = game:GetService("CoreGui")
 
--- ================= PARTICLE FIELD =================
-local particles = Instance.new("Frame")
-particles.Size = UDim2.new(1, 0, 1, 0)
-particles.BackgroundTransparency = 1
-particles.ZIndex = 2
-particles.ClipsDescendants = true
-particles.Parent = SG
-local particleDots = {}
-for i = 1, 40 do
-    local p = Instance.new("Frame")
-    p.Size = UDim2.new(0, math.random(2, 4), 0, math.random(2, 4))
-    p.Position = UDim2.new(math.random(), 0, math.random(), 0)
-    p.BackgroundColor3 = T.Accent
-    p.BackgroundTransparency = math.random(60, 85) / 100
-    p.BorderSizePixel = 0
-    p.ZIndex = 2
-    p.Parent = particles
-    Instance.new("UICorner", p).CornerRadius = UDim.new(1, 0)
-    table.insert(particleDots, {dot = p, speedY = math.random(10, 40) / 1000, speedX = math.random(-15, 15) / 1000})
-end
-task.spawn(function()
-    while particles.Parent do
-        for _, data in pairs(particleDots) do
-            local p = data.dot
-            local posY = p.Position.Y.Scale + data.speedY
-            local posX = p.Position.X.Scale + data.speedX
-            if posY > 1.05 then posY = -0.05; posX = math.random() end
-            if posX > 1.05 then posX = -0.05 elseif posX < -0.05 then posX = 1.05 end
-            p.Position = UDim2.new(posX, 0, posY, 0)
-        end
-        task.wait(0.03)
-    end
-end)
-
 -- ================= LOADING SCREEN =================
 local loadRoot = Instance.new("Frame")
 loadRoot.Size = UDim2.new(0, uiW, 0, uiH)
 loadRoot.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
 loadRoot.BackgroundColor3 = T.Bg
-loadRoot.BackgroundTransparency = 0.02
 loadRoot.BorderSizePixel = 0
 loadRoot.ZIndex = 100
 loadRoot.Parent = SG
@@ -421,54 +389,54 @@ loadStroke.Thickness = 1
 loadStroke.Transparency = 0.4
 
 local loadGlow = Instance.new("Frame")
-loadGlow.Size = UDim2.new(1, 40, 1, 40)
-loadGlow.Position = UDim2.new(0, -20, 0, -20)
+loadGlow.Size = UDim2.new(1, 30, 1, 30)
+loadGlow.Position = UDim2.new(0, -15, 0, -15)
 loadGlow.BackgroundColor3 = T.Accent
 loadGlow.BackgroundTransparency = 0.8
 loadGlow.BorderSizePixel = 0
 loadGlow.ZIndex = 99
 loadGlow.Parent = loadRoot
-Instance.new("UICorner", loadGlow).CornerRadius = UDim.new(0, 32)
+Instance.new("UICorner", loadGlow).CornerRadius = UDim.new(0, 24)
 TweenService:Create(loadGlow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-    {BackgroundTransparency = 0.5, Size = UDim2.new(1, 56, 1, 56), Position = UDim2.new(0, -28, 0, -28)}):Play()
+    {BackgroundTransparency = 0.5, Size = UDim2.new(1, 44, 1, 44), Position = UDim2.new(0, -22, 0, -22)}):Play()
 
 local loadRing = Instance.new("Frame")
-loadRing.Size = UDim2.new(0, 90, 0, 90)
-loadRing.Position = UDim2.new(0.5, -45, 0.5, -120)
+loadRing.Size = UDim2.new(0, 80, 0, 80)
+loadRing.Position = UDim2.new(0.5, -40, 0.5, -100)
 loadRing.BackgroundTransparency = 1
 loadRing.ZIndex = 101
 loadRing.Parent = loadRoot
 local ringStroke = Instance.new("UIStroke", loadRing)
 ringStroke.Color = T.Accent
 ringStroke.Thickness = 3
-ringStroke.Transparency = 0.1
+ringStroke.Transparency = 0.15
 Instance.new("UICorner", loadRing).CornerRadius = UDim.new(1, 0)
 
 local loadTitle = Instance.new("TextLabel")
-loadTitle.Size = UDim2.new(1, 0, 0, 36)
+loadTitle.Size = UDim2.new(1, 0, 0, 32)
 loadTitle.Position = UDim2.new(0, 0, 0.5, -20)
 loadTitle.Text = ""
-loadTitle.TextColor3 = T.Text
+loadTitle.TextColor3 = T.Accent
 loadTitle.BackgroundTransparency = 1
 loadTitle.Font = Enum.Font.GothamBlack
-loadTitle.TextSize = 24
+loadTitle.TextSize = 22
 loadTitle.ZIndex = 101
 loadTitle.Parent = loadRoot
 
-local loadSubtitle = Instance.new("TextLabel")
-loadSubtitle.Size = UDim2.new(1, 0, 0, 20)
-loadSubtitle.Position = UDim2.new(0, 0, 0.5, 18)
-loadSubtitle.Text = "Initializing components..."
-loadSubtitle.TextColor3 = T.TextDim
-loadSubtitle.BackgroundTransparency = 1
-loadSubtitle.Font = Enum.Font.Gotham
-loadSubtitle.TextSize = 11
-loadSubtitle.ZIndex = 101
-loadSubtitle.Parent = loadRoot
+local loadSub = Instance.new("TextLabel")
+loadSub.Size = UDim2.new(1, 0, 0, 20)
+loadSub.Position = UDim2.new(0, 0, 0.5, 16)
+loadSub.Text = "Loading..."
+loadSub.TextColor3 = T.TextDim
+loadSub.BackgroundTransparency = 1
+loadSub.Font = Enum.Font.Gotham
+loadSub.TextSize = 11
+loadSub.ZIndex = 101
+loadSub.Parent = loadRoot
 
 local loadBar = Instance.new("Frame")
-loadBar.Size = UDim2.new(0, 300, 0, 5)
-loadBar.Position = UDim2.new(0.5, -150, 0.5, 60)
+loadBar.Size = UDim2.new(0, 260, 0, 4)
+loadBar.Position = UDim2.new(0.5, -130, 0.5, 58)
 loadBar.BackgroundColor3 = T.PanelLight
 loadBar.BorderSizePixel = 0
 loadBar.ZIndex = 101
@@ -483,19 +451,19 @@ loadFill.ZIndex = 102
 loadFill.Parent = loadBar
 Instance.new("UICorner", loadFill).CornerRadius = UDim.new(1, 0)
 local loadFillGrad = Instance.new("UIGradient")
-loadFillGrad.Color = ColorSequence.new(T.Accent, T.Accent2, T.Accent3)
+loadFillGrad.Color = ColorSequence.new(T.Accent3, T.Accent, T.Accent2)
 loadFillGrad.Parent = loadFill
 
-local loadPercent = Instance.new("TextLabel")
-loadPercent.Size = UDim2.new(1, 0, 0, 20)
-loadPercent.Position = UDim2.new(0, 0, 0.5, 76)
-loadPercent.Text = "0%"
-loadPercent.TextColor3 = T.Accent
-loadPercent.BackgroundTransparency = 1
-loadPercent.Font = Enum.Font.GothamBold
-loadPercent.TextSize = 12
-loadPercent.ZIndex = 101
-loadPercent.Parent = loadRoot
+local loadPct = Instance.new("TextLabel")
+loadPct.Size = UDim2.new(1, 0, 0, 20)
+loadPct.Position = UDim2.new(0, 0, 0.5, 72)
+loadPct.Text = "0%"
+loadPct.TextColor3 = T.Accent
+loadPct.BackgroundTransparency = 1
+loadPct.Font = Enum.Font.GothamBold
+loadPct.TextSize = 12
+loadPct.ZIndex = 101
+loadPct.Parent = loadRoot
 
 task.spawn(function()
     local txt = "SPENT HUB"
@@ -521,7 +489,7 @@ task.spawn(function()
     while loadFill.Parent and tick() - start < 5 do
         local p = math.min(1, (tick() - start) / 5)
         loadFill.Size = UDim2.new(p, 0, 1, 0)
-        loadPercent.Text = math.floor(p * 100) .. "%"
+        loadPct.Text = math.floor(p * 100) .. "%"
         task.wait(0.05)
     end
 end)
@@ -606,43 +574,44 @@ Main.Parent = SG
 Instance.new("UICorner", Main).CornerRadius = CORNER
 
 local glow = Instance.new("Frame")
-glow.Size = UDim2.new(1, 40, 1, 40)
-glow.Position = UDim2.new(0, -20, 0, -20)
+glow.Size = UDim2.new(1, 32, 1, 32)
+glow.Position = UDim2.new(0, -16, 0, -16)
 glow.BackgroundColor3 = T.Accent
 glow.BackgroundTransparency = 0.85
 glow.BorderSizePixel = 0
 glow.ZIndex = 0
 glow.Parent = Main
-Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 32)
+Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 26)
 TweenService:Create(glow, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-    {BackgroundTransparency = 0.55, Size = UDim2.new(1, 56, 1, 56), Position = UDim2.new(0, -28, 0, -28)}):Play()
+    {BackgroundTransparency = 0.55, Size = UDim2.new(1, 44, 1, 44), Position = UDim2.new(0, -22, 0, -22)}):Play()
 
 local stroke = Instance.new("UIStroke", Main)
 stroke.Color = T.StrokeLight
 stroke.Thickness = 1
 stroke.Transparency = 0.3
 
--- gradient accent border
-local borderGrad = Instance.new("Frame")
-borderGrad.Size = UDim2.new(1, 4, 1, 4)
-borderGrad.Position = UDim2.new(0, -2, 0, -2)
-borderGrad.BackgroundColor3 = T.Accent
-borderGrad.BackgroundTransparency = 1
-borderGrad.BorderSizePixel = 0
-borderGrad.ZIndex = 0
-borderGrad.Parent = Main
-Instance.new("UICorner", borderGrad).CornerRadius = CORNER
+-- gradient border
+local borderGradFrame = Instance.new("Frame")
+borderGradFrame.Size = UDim2.new(1, 4, 1, 4)
+borderGradFrame.Position = UDim2.new(0, -2, 0, -2)
+borderGradFrame.BackgroundColor3 = T.Accent
+borderGradFrame.BackgroundTransparency = 1
+borderGradFrame.BorderSizePixel = 0
+borderGradFrame.ZIndex = 0
+borderGradFrame.Parent = Main
+Instance.new("UICorner", borderGradFrame).CornerRadius = CORNER
 local borderGradUI = Instance.new("UIGradient")
-borderGradUI.Color = ColorSequence.new(T.Accent, T.Accent2, T.Accent3, T.Accent)
+borderGradUI.Color = ColorSequence.new(T.Accent3, T.Accent, T.Accent2, T.Accent3)
 borderGradUI.Rotation = 0
-borderGradUI.Parent = borderGrad
+borderGradUI.Parent = borderGradFrame
 task.spawn(function()
-    while borderGrad.Parent do
+    while borderGradFrame.Parent do
         borderGradUI.Rotation = (borderGradUI.Rotation + 1) % 360
         task.wait(0.04)
     end
 end)
 
+-- aurora
 local aurora = Instance.new("Frame")
 aurora.Size = UDim2.new(1, 0, 1, 0)
 aurora.BackgroundColor3 = T.Bg
@@ -653,10 +622,10 @@ aurora.Parent = Main
 Instance.new("UICorner", aurora).CornerRadius = CORNER
 local auroraGrad = Instance.new("UIGradient")
 auroraGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 28, 90)),
-    ColorSequenceKeypoint.new(0.35, Color3.fromRGB(10, 10, 20)),
-    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(65, 28, 100)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 30))
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 30, 55)),
+    ColorSequenceKeypoint.new(0.35, Color3.fromRGB(15, 12, 20)),
+    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(65, 35, 75)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(18, 15, 25))
 })
 auroraGrad.Rotation = 45
 auroraGrad.Parent = aurora
@@ -667,6 +636,7 @@ task.spawn(function()
     end
 end)
 
+-- scanlines
 local scan = Instance.new("Frame")
 scan.Size = UDim2.new(1, 0, 1, 0)
 scan.BackgroundTransparency = 1
@@ -685,6 +655,7 @@ for i = 0, 60 do
     line.Parent = scan
 end
 
+-- noise
 local noise = Instance.new("Frame")
 noise.Size = UDim2.new(1, 0, 1, 0)
 noise.BackgroundTransparency = 1
@@ -692,7 +663,7 @@ noise.ZIndex = 2
 noise.ClipsDescendants = true
 noise.Parent = Main
 Instance.new("UICorner", noise).CornerRadius = CORNER
-for i = 1, 180 do
+for i = 1, 160 do
     local dot = Instance.new("Frame")
     dot.Size = UDim2.new(0, 1, 0, 1)
     dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
@@ -703,6 +674,7 @@ for i = 1, 180 do
     dot.Parent = noise
 end
 
+-- light sweep
 local sweep = Instance.new("Frame")
 sweep.Size = UDim2.new(0.18, 0, 1.6, 0)
 sweep.Position = UDim2.new(-0.4, 0, -0.3, 0)
@@ -721,8 +693,9 @@ task.spawn(function()
     end
 end)
 
+-- cursor spotlight
 local spotlight = Instance.new("Frame")
-spotlight.Size = UDim2.new(0, 360, 0, 360)
+spotlight.Size = UDim2.new(0, 340, 0, 340)
 spotlight.BackgroundColor3 = T.Accent
 spotlight.BackgroundTransparency = 0.95
 spotlight.BorderSizePixel = 0
@@ -732,7 +705,7 @@ Instance.new("UICorner", spotlight).CornerRadius = UDim.new(1, 0)
 
 -- TITLE BAR
 local Title = Instance.new("Frame")
-Title.Size = UDim2.new(1, 0, 0, 52)
+Title.Size = UDim2.new(1, 0, 0, 50)
 Title.BackgroundColor3 = T.Panel
 Title.BackgroundTransparency = 0.1
 Title.ZIndex = 4
@@ -744,36 +717,36 @@ titleStroke.Thickness = 1
 titleStroke.Transparency = 0.4
 
 local accentBar = Instance.new("Frame")
-accentBar.Size = UDim2.new(0, 4, 0, 28)
-accentBar.Position = UDim2.new(0, 20, 0.5, -14)
+accentBar.Size = UDim2.new(0, 4, 0, 26)
+accentBar.Position = UDim2.new(0, 18, 0.5, -13)
 accentBar.BackgroundColor3 = T.Accent
 accentBar.BorderSizePixel = 0
 accentBar.ZIndex = 5
 accentBar.Parent = Title
 Instance.new("UICorner", accentBar).CornerRadius = UDim.new(1, 0)
 local accentGrad = Instance.new("UIGradient")
-accentGrad.Color = ColorSequence.new(T.Accent, T.Accent2)
+accentGrad.Color = ColorSequence.new(T.Accent3, T.Accent2)
 accentGrad.Parent = accentBar
 task.spawn(function()
     TweenService:Create(accentBar, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-        {Size = UDim2.new(0, 4, 0, 36), Position = UDim2.new(0, 20, 0.5, -18)}):Play()
+        {Size = UDim2.new(0, 4, 0, 34), Position = UDim2.new(0, 18, 0.5, -17)}):Play()
 end)
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -180, 1, 0)
-TitleLabel.Position = UDim2.new(0, 34, 0, 0)
+TitleLabel.Position = UDim2.new(0, 32, 0, 0)
 TitleLabel.Text = "SPENT HUB"
 TitleLabel.TextColor3 = T.Text
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Font = Enum.Font.GothamBlack
-TitleLabel.TextSize = 16
+TitleLabel.TextSize = 15
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.ZIndex = 5
 TitleLabel.Parent = Title
 
 local deviceText = Instance.new("TextLabel")
 deviceText.Size = UDim2.new(0, 200, 1, 0)
-deviceText.Position = UDim2.new(1, -440, 0, 0)
+deviceText.Position = UDim2.new(1, -420, 0, 0)
 deviceText.Text = (isPC and "PC" or isMobile and "Mobile" or "Hybrid") .. " | " .. (isLandscape and "Landscape" or "Portrait")
 deviceText.TextColor3 = T.TextDim
 deviceText.BackgroundTransparency = 1
@@ -784,8 +757,8 @@ deviceText.ZIndex = 5
 deviceText.Parent = Title
 
 local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 36, 0, 36)
-MinBtn.Position = UDim2.new(1, -84, 0.5, -18)
+MinBtn.Size = UDim2.new(0, 34, 0, 34)
+MinBtn.Position = UDim2.new(1, -80, 0.5, -17)
 MinBtn.Text = "—"
 MinBtn.TextColor3 = T.TextDim
 MinBtn.BackgroundColor3 = T.PanelLight
@@ -796,8 +769,8 @@ MinBtn.Parent = Title
 Instance.new("UICorner", MinBtn).CornerRadius = CORNER
 
 local Close = Instance.new("TextButton")
-Close.Size = UDim2.new(0, 36, 0, 36)
-Close.Position = UDim2.new(1, -44, 0.5, -18)
+Close.Size = UDim2.new(0, 34, 0, 34)
+Close.Position = UDim2.new(1, -42, 0.5, -17)
 Close.Text = "X"
 Close.TextColor3 = T.Text
 Close.BackgroundColor3 = T.PanelLight
@@ -814,6 +787,7 @@ Close.MouseButton1Click:Connect(function()
     SG:Destroy()
 end)
 
+-- drag
 local dragging, dragStart, frameStart
 Title.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
@@ -828,6 +802,7 @@ Title.InputChanged:Connect(function(i)
 end)
 Title.InputEnded:Connect(function() dragging = false end)
 
+-- parallax
 UserInputService.InputChanged:Connect(function(i)
     if i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
     local absX, absY = Main.AbsolutePosition.X, Main.AbsolutePosition.Y
@@ -836,35 +811,34 @@ UserInputService.InputChanged:Connect(function(i)
     local relY = (i.Position.Y - absY) / math.max(wY, 1)
     if relX > -0.15 and relX < 1.15 and relY > -0.15 and relY < 1.15 then
         auroraGrad.Rotation = 45 + relX * 80
-        glow.Position = UDim2.new(0, -20 + relX * 8, 0, -20 + relY * 8)
-        spotlight.Position = UDim2.new(relX, -180, relY, -180)
+        glow.Position = UDim2.new(0, -16 + relX * 6, 0, -16 + relY * 6)
+        spotlight.Position = UDim2.new(relX, -170, relY, -170)
     end
 end)
 
 local minimized = false
 local fullSize = UDim2.new(0, uiW, 0, uiH)
-local hiddenUI = false
 MinBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     MinBtn.Text = minimized and "+" or "—"
     notify("Spent Hub", minimized and "Minimized" or "Restored", "default")
-    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = minimized and UDim2.new(0, uiW, 0, 52) or fullSize}):Play()
+    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = minimized and UDim2.new(0, uiW, 0, 50) or fullSize}):Play()
 end)
 
 -- BODY
 local Body = Instance.new("Frame")
-Body.Size = isLandscape and UDim2.new(1, 0, 1, -52) or UDim2.new(1, 0, 1, -112)
-Body.Position = UDim2.new(0, 0, 0, 52)
+Body.Size = isLandscape and UDim2.new(1, 0, 1, -50) or UDim2.new(1, 0, 1, -110)
+Body.Position = UDim2.new(0, 0, 0, 50)
 Body.BackgroundTransparency = 1
 Body.ZIndex = 4
 Body.Parent = Main
 
 local Sidebar = Instance.new("Frame")
 if isLandscape then
-    Sidebar.Size = UDim2.new(0, 168, 1, -20)
+    Sidebar.Size = UDim2.new(0, 160, 1, -20)
     Sidebar.Position = UDim2.new(0, 10, 0, 10)
 else
-    Sidebar.Size = UDim2.new(1, -20, 0, 56)
+    Sidebar.Size = UDim2.new(1, -20, 0, 54)
     Sidebar.Position = UDim2.new(0, 10, 0, 10)
 end
 Sidebar.BackgroundColor3 = T.Panel
@@ -883,15 +857,15 @@ sidebarLayout.FillDirection = isLandscape and Enum.FillDirection.Vertical or Enu
 sidebarLayout.Padding = UDim.new(0, 5)
 sidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 sidebarLayout.VerticalAlignment = isLandscape and Enum.VerticalAlignment.Top or Enum.VerticalAlignment.Center
-if isLandscape then Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 10) end
+if isLandscape then Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 8) end
 
 local Pages = Instance.new("Frame")
 if isLandscape then
-    Pages.Size = UDim2.new(1, -198, 1, -20)
-    Pages.Position = UDim2.new(0, 188, 0, 10)
+    Pages.Size = UDim2.new(1, -190, 1, -20)
+    Pages.Position = UDim2.new(0, 180, 0, 10)
 else
-    Pages.Size = UDim2.new(1, -20, 1, -148)
-    Pages.Position = UDim2.new(0, 10, 0, 76)
+    Pages.Size = UDim2.new(1, -20, 1, -144)
+    Pages.Position = UDim2.new(0, 10, 0, 74)
 end
 Pages.BackgroundColor3 = T.Panel
 Pages.BackgroundTransparency = 0.1
@@ -930,7 +904,7 @@ CombatPage.Visible = true
 local tabs = {}
 local function makeTab(name, page, order)
     local b = Instance.new("TextButton")
-    if isLandscape then b.Size = UDim2.new(1, -16, 0, 46)
+    if isLandscape then b.Size = UDim2.new(1, -16, 0, 44)
     else b.Size = UDim2.new(0, 100, 1, -8) end
     b.BackgroundColor3 = T.Bg
     b.Text = name
@@ -945,8 +919,8 @@ local function makeTab(name, page, order)
 
     local indicator = Instance.new("Frame")
     if isLandscape then
-        indicator.Size = UDim2.new(0, 3, 0, 22)
-        indicator.Position = UDim2.new(0, 0, 0.5, -11)
+        indicator.Size = UDim2.new(0, 3, 0, 20)
+        indicator.Position = UDim2.new(0, 0, 0.5, -10)
     else
         indicator.Size = UDim2.new(0, 20, 0, 3)
         indicator.Position = UDim2.new(0.5, -10, 1, -4)
@@ -958,7 +932,7 @@ local function makeTab(name, page, order)
     indicator.Parent = b
     Instance.new("UICorner", indicator).CornerRadius = UDim.new(1, 0)
     local indGrad = Instance.new("UIGradient")
-    indGrad.Color = ColorSequence.new(T.Accent, T.Accent2)
+    indGrad.Color = ColorSequence.new(T.Accent3, T.Accent2)
     indGrad.Parent = indicator
 
     tabs[name] = {button = b, indicator = indicator, page = page}
@@ -1016,7 +990,7 @@ end
 
 local function newToggle(parent, label, order, initial, cb)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, -16, 0, 46)
+    f.Size = UDim2.new(1, -16, 0, 44)
     f.BackgroundColor3 = T.PanelLight
     f.BackgroundTransparency = 0.1
     f.BorderSizePixel = 0
@@ -1042,17 +1016,17 @@ local function newToggle(parent, label, order, initial, cb)
     l.Parent = f
 
     local track = Instance.new("Frame")
-    track.Size = UDim2.new(0, 46, 0, 24)
-    track.Position = UDim2.new(1, -58, 0.5, -12)
-    track.BackgroundColor3 = initial and T.Green or T.Panel
+    track.Size = UDim2.new(0, 44, 0, 22)
+    track.Position = UDim2.new(1, -56, 0.5, -11)
+    track.BackgroundColor3 = initial and T.Accent or T.Panel
     track.BorderSizePixel = 0
     track.ZIndex = 8
     track.Parent = f
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
 
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 18, 0, 18)
-    knob.Position = initial and UDim2.new(1, -22, 0.5, -9) or UDim2.new(0, 4, 0.5, -9)
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = initial and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
     knob.BackgroundColor3 = T.Text
     knob.BorderSizePixel = 0
     knob.ZIndex = 9
@@ -1063,8 +1037,8 @@ local function newToggle(parent, label, order, initial, cb)
     local function setState(v, anim)
         state = v
         if cb then cb(v) end
-        local targetPos = v and UDim2.new(1, -22, 0.5, -9) or UDim2.new(0, 4, 0.5, -9)
-        local targetColor = v and T.Green or T.Panel
+        local targetPos = v and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
+        local targetColor = v and T.Accent or T.Panel
         if anim then
             TweenService:Create(knob, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {Position = targetPos}):Play()
             TweenService:Create(track, TweenInfo.new(0.15), {BackgroundColor3 = targetColor}):Play()
@@ -1092,7 +1066,7 @@ end
 
 local function newSlider(parent, label, min, max, def, order, cb)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, -16, 0, 58)
+    f.Size = UDim2.new(1, -16, 0, 56)
     f.BackgroundColor3 = T.PanelLight
     f.BackgroundTransparency = 0.1
     f.BorderSizePixel = 0
@@ -1131,7 +1105,7 @@ local function newSlider(parent, label, min, max, def, order, cb)
 
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1, -28, 0, 6)
-    bar.Position = UDim2.new(0, 14, 0, 36)
+    bar.Position = UDim2.new(0, 14, 0, 34)
     bar.BackgroundColor3 = T.Panel
     bar.BorderSizePixel = 0
     bar.ZIndex = 8
@@ -1147,12 +1121,12 @@ local function newSlider(parent, label, min, max, def, order, cb)
     Instance.new("UICorner", fill).CornerRadius = UDim.new(1, 0)
 
     local fillGrad = Instance.new("UIGradient")
-    fillGrad.Color = ColorSequence.new(T.Accent, T.Accent2)
+    fillGrad.Color = ColorSequence.new(T.Accent3, T.Accent2)
     fillGrad.Parent = fill
 
     local knob = Instance.new("TextButton")
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = UDim2.new((def-min)/(max-min), -8, 0.5, -8)
+    knob.Size = UDim2.new(0, 14, 0, 14)
+    knob.Position = UDim2.new((def-min)/(max-min), -7, 0.5, -7)
     knob.Text = ""
     knob.BackgroundColor3 = T.Text
     knob.BorderSizePixel = 0
@@ -1165,7 +1139,7 @@ local function newSlider(parent, label, min, max, def, order, cb)
         local p = math.clamp((x - bar.AbsolutePosition.X)/bar.AbsoluteSize.X, 0, 1)
         local v = math.floor(min + (max-min)*p)
         fill.Size = UDim2.new(p, 0, 1, 0)
-        knob.Position = UDim2.new(p, -8, 0.5, -8)
+        knob.Position = UDim2.new(p, -7, 0.5, -7)
         valLabel.Text = tostring(v)
         if cb then cb(v) end
     end
@@ -1183,7 +1157,7 @@ end
 
 local function newCycle(parent, label, options, def, order, cb)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, -16, 0, 46)
+    f.Size = UDim2.new(1, -16, 0, 44)
     f.BackgroundColor3 = T.PanelLight
     f.BackgroundTransparency = 0.1
     f.BorderSizePixel = 0
@@ -1205,8 +1179,8 @@ local function newCycle(parent, label, options, def, order, cb)
     l.Parent = f
 
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 80, 0, 28)
-    btn.Position = UDim2.new(1, -92, 0.5, -14)
+    btn.Size = UDim2.new(0, 78, 0, 26)
+    btn.Position = UDim2.new(1, -90, 0.5, -13)
     btn.Text = def
     btn.TextColor3 = T.Accent
     btn.BackgroundColor3 = T.Bg
@@ -1227,6 +1201,7 @@ local function newCycle(parent, label, options, def, order, cb)
     return f
 end
 
+-- COMBAT
 newLabel(CombatPage, "SILENT AIM", 1, true)
 local enabledToggle = newToggle(CombatPage, "Enable Silent Aim (RightAlt)", 2, false, function(v)
     SilentAimSettings.Enabled = v
@@ -1247,7 +1222,7 @@ newSlider(CombatPage, "Hit Chance", 0, 100, 100, 7, function(v) SilentAimSetting
 
 newLabel(CombatPage, "WHITELIST", 8, true)
 local wlInput = Instance.new("TextBox")
-wlInput.Size = UDim2.new(1, -16, 0, 42)
+wlInput.Size = UDim2.new(1, -16, 0, 40)
 wlInput.BackgroundColor3 = T.PanelLight
 wlInput.TextColor3 = T.Text
 wlInput.PlaceholderText = "Enter username to whitelist"
@@ -1262,7 +1237,7 @@ wlInput.Parent = CombatPage
 Instance.new("UICorner", wlInput).CornerRadius = CORNER
 
 local wlBtn = Instance.new("TextButton")
-wlBtn.Size = UDim2.new(1, -16, 0, 42)
+wlBtn.Size = UDim2.new(1, -16, 0, 40)
 wlBtn.BackgroundColor3 = T.PanelLight
 wlBtn.Text = "Add to Whitelist"
 wlBtn.TextColor3 = T.Text
@@ -1289,6 +1264,7 @@ wlBtn.MouseButton1Click:Connect(function()
     end
 end)
 
+-- VISUAL
 newLabel(VisualPage, "FIELD OF VIEW", 1, true)
 newToggle(VisualPage, "Show FOV Circle (E)", 2, false, function(v)
     SilentAimSettings.FOVVisible = v
@@ -1310,13 +1286,11 @@ newSlider(VisualPage, "Prediction Amount", 16, 100, 16, 7, function(v)
     SilentAimSettings.MouseHitPredictionAmount = PredictionAmount
 end)
 
+-- ESP
 newLabel(ESPPage, "ESP SYSTEM", 1, true)
 newToggle(ESPPage, "Enable ESP (RightCtrl)", 2, false, function(v)
     ESPSettings.Enabled = v
     notify("ESP", v and "Enabled" or "Disabled", v and "success" or "error")
-    if not v then
-        for player, d in pairs(ESPdrawings or {}) do resetESPDrawings(d, false) end
-    end
 end)
 newToggle(ESPPage, "Box ESP", 3, true, function(v) ESPSettings.Box = v end)
 newToggle(ESPPage, "Name ESP", 4, true, function(v) ESPSettings.Name = v end)
@@ -1327,10 +1301,11 @@ newToggle(ESPPage, "Skeleton ESP", 8, false, function(v) ESPSettings.Skeleton = 
 newToggle(ESPPage, "ESP Team Check", 9, true, function(v) ESPSettings.TeamCheck = v end)
 newSlider(ESPPage, "ESP Max Distance", 100, 5000, 1000, 10, function(v) ESPSettings.MaxDistance = v end)
 
+-- CONFIG
 newLabel(ConfigPage, "CONFIGURATION", 1, true)
 local configName = "config1"
 local nameBox = Instance.new("TextBox")
-nameBox.Size = UDim2.new(1, -16, 0, 42)
+nameBox.Size = UDim2.new(1, -16, 0, 40)
 nameBox.BackgroundColor3 = T.PanelLight
 nameBox.TextColor3 = T.Text
 nameBox.PlaceholderText = "Config name"
@@ -1348,7 +1323,7 @@ nameBox:GetPropertyChangedSignal("Text"):Connect(function()
 end)
 
 local saveBtn = Instance.new("TextButton")
-saveBtn.Size = UDim2.new(1, -16, 0, 42)
+saveBtn.Size = UDim2.new(1, -16, 0, 40)
 saveBtn.BackgroundColor3 = T.PanelLight
 saveBtn.Text = "Save Config"
 saveBtn.TextColor3 = T.Text
@@ -1367,7 +1342,7 @@ saveBtn.MouseButton1Click:Connect(function()
 end)
 
 local loadBtn = Instance.new("TextButton")
-loadBtn.Size = UDim2.new(1, -16, 0, 42)
+loadBtn.Size = UDim2.new(1, -16, 0, 40)
 loadBtn.BackgroundColor3 = T.PanelLight
 loadBtn.Text = "Load Config"
 loadBtn.TextColor3 = T.Text
@@ -1394,26 +1369,33 @@ loadBtn.MouseButton1Click:Connect(function()
     end
 end)
 
-UserInputService.InputBegan:Connect(function(i, gp)
-    if gp then return end
-    if i.KeyCode == Keybinds.SilentAim then
+-- ================= FIXED KEYBINDS =================
+-- Uses UserInputService.InputBegan with gameProcessedEvent check
+-- Reads current KeybindSettings values directly (no stale references)
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed then return end
+    if not input.KeyCode or input.KeyCode == Enum.KeyCode.Unknown then return end
+
+    local kc = input.KeyCode
+    if kc == KeybindSettings.SilentAim then
         SilentAimSettings.Enabled = not SilentAimSettings.Enabled
         enabledToggle.set(SilentAimSettings.Enabled)
+        mouse_box.Visible = SilentAimSettings.Enabled and SilentAimSettings.ShowSilentAimTarget
         notify("Keybind", "Silent Aim: " .. (SilentAimSettings.Enabled and "ON" or "OFF"), SilentAimSettings.Enabled and "success" or "error")
-    elseif i.KeyCode == Keybinds.ESP then
+    elseif kc == KeybindSettings.ESP then
         ESPSettings.Enabled = not ESPSettings.Enabled
         notify("Keybind", "ESP: " .. (ESPSettings.Enabled and "ON" or "OFF"), ESPSettings.Enabled and "success" or "error")
-    elseif i.KeyCode == Keybinds.FOV then
+    elseif kc == KeybindSettings.FOV then
         SilentAimSettings.FOVVisible = not SilentAimSettings.FOVVisible
         fov_circle.Visible = SilentAimSettings.FOVVisible
         notify("Keybind", "FOV: " .. (SilentAimSettings.FOVVisible and "ON" or "OFF"), SilentAimSettings.FOVVisible and "success" or "error")
-    elseif i.KeyCode == Keybinds.HideUI then
-        hiddenUI = not hiddenUI
-        Main.Visible = not hiddenUI
-        notify("UI", hiddenUI and "Hidden (RightShift to show)" or "Shown", "default")
+    elseif kc == KeybindSettings.UI then
+        Main.Visible = not Main.Visible
+        notify("UI", Main.Visible and "Shown" or "Hidden", "default")
     end
 end)
 
+-- Silent aim render loop
 RenderStepped:Connect(function()
     if SilentAimSettings.Enabled and SilentAimSettings.ShowSilentAimTarget then
         local target = getClosestPlayer()
@@ -1428,12 +1410,14 @@ RenderStepped:Connect(function()
     end
     if SilentAimSettings.FOVVisible then
         fov_circle.Visible = true
+        fov_circle.Color = T.Accent
         fov_circle.Position = getAimPosition()
     else
         fov_circle.Visible = false
     end
 end)
 
+-- ESP loop
 Heartbeat:Connect(function()
     if not ESPSettings.Enabled then
         for _, d in pairs(ESPdrawings or {}) do resetESPDrawings(d, false) end
@@ -1453,7 +1437,7 @@ Heartbeat:Connect(function()
     end
 end)
 
--- silent aim hooks (UNTOUCHED)
+-- ================= SILENT AIM HOOKS (UNTOUCHED) =================
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -1519,6 +1503,7 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     return oldIndex(self, Index)
 end))
 
+-- re-layout
 Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     local newW, newH, land = calcSize()
     uiW, uiH, isLandscape = newW, newH, land
@@ -1527,6 +1512,7 @@ Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     fullSize = UDim2.new(0, uiW, 0, uiH)
 end)
 
+-- loading -> show hub
 task.spawn(function()
     task.wait(5)
     if loadRoot.Parent then
@@ -1548,4 +1534,4 @@ task.spawn(function()
     end
 end)
 
-print("Spent Hub v5.0 loaded | Silent Aim (untouched) + ESP + Whitelist + Premium GUI")
+print("Spent Hub v6.0 loaded | Pink accent | Silent aim untouched | Fixed keybinds")
