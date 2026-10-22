@@ -21,7 +21,7 @@ getgenv().SilentAimSettings = SilentAimSettings
 local ESPSettings = {
     Enabled = false,
     Box = true, Name = true, Health = true, Distance = true,
-    Tracer = false, Skeleton = false,
+    Tracer = false, Skeleton = false, Chams = false,
     MaxDistance = 1000,
     Color = Color3.fromRGB(140, 100, 255),
     TeamCheck = true,
@@ -31,7 +31,8 @@ local ESPSettings = {
 local Keybinds = {
     SilentAim = Enum.KeyCode.RightAlt,
     ESP = Enum.KeyCode.RightControl,
-    FOV = Enum.KeyCode.E
+    FOV = Enum.KeyCode.E,
+    HideUI = Enum.KeyCode.RightShift
 }
 
 local Whitelist = {}
@@ -45,6 +46,7 @@ local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local GetPlayers = Players.GetPlayers
@@ -65,7 +67,6 @@ local isMobile = hasTouch and not hasKeyboard
 local isPC = hasKeyboard and hasMouse
 local isHybrid = hasTouch and hasKeyboard and hasMouse
 
--- drawings
 local mouse_box = Drawing.new("Square")
 mouse_box.Visible = false
 mouse_box.ZIndex = 999
@@ -202,7 +203,6 @@ local function getClosestPlayer()
     return Closest
 end
 
--- ESP
 local function createESPDrawings()
     return {
         box = Drawing.new("Square"),
@@ -336,7 +336,34 @@ end
 local lastESPRender = 0
 local espFrameInterval = 1 / ESPSettings.RenderFPS
 
--- ================= ULTIMATE UI =================
+-- ================= THEME =================
+local T = {
+    Bg = Color3.fromRGB(5, 5, 8),
+    Panel = Color3.fromRGB(12, 12, 18),
+    PanelLight = Color3.fromRGB(20, 20, 28),
+    PanelHover = Color3.fromRGB(30, 30, 42),
+    Accent = Color3.fromRGB(150, 105, 255),
+    Accent2 = Color3.fromRGB(230, 90, 255),
+    Accent3 = Color3.fromRGB(70, 190, 255),
+    Text = Color3.fromRGB(250, 250, 255),
+    TextDim = Color3.fromRGB(120, 120, 145),
+    Green = Color3.fromRGB(70, 220, 140),
+    Red = Color3.fromRGB(240, 85, 85),
+    Stroke = Color3.fromRGB(48, 48, 65),
+    StrokeLight = Color3.fromRGB(80, 80, 100)
+}
+local CORNER = UDim.new(0, 20)
+
+local function calcSize()
+    local vpX, vpY = Camera.ViewportSize.X, Camera.ViewportSize.Y
+    local land = vpX > vpY
+    local w = land and math.clamp(vpX * 0.75, 560, 900) or math.clamp(vpX * 0.95, 360, 500)
+    local h = land and math.clamp(vpY * 0.92, 340, 560) or math.clamp(vpY * 0.82, 460, 740)
+    return w, h, land
+end
+local uiW, uiH, isLandscape = calcSize()
+
+-- ================= ROOT GUI =================
 local SG = Instance.new("ScreenGui")
 SG.Name = "SpentHub"
 SG.ResetOnSpawn = false
@@ -344,242 +371,162 @@ SG.IgnoreGuiInset = true
 SG.DisplayOrder = 999
 SG.Parent = game:GetService("CoreGui")
 
-local T = {
-    Bg = Color3.fromRGB(5, 5, 9),
-    Panel = Color3.fromRGB(13, 13, 19),
-    PanelLight = Color3.fromRGB(21, 21, 29),
-    PanelHover = Color3.fromRGB(30, 30, 42),
-    Accent = Color3.fromRGB(140, 100, 255),
-    Accent2 = Color3.fromRGB(220, 80, 255),
-    Accent3 = Color3.fromRGB(60, 180, 255),
-    Text = Color3.fromRGB(248, 248, 252),
-    TextDim = Color3.fromRGB(115, 115, 140),
-    Green = Color3.fromRGB(70, 210, 130),
-    Red = Color3.fromRGB(230, 80, 80),
-    Stroke = Color3.fromRGB(45, 45, 62),
-    StrokeLight = Color3.fromRGB(75, 75, 95)
-}
-
-local function calcSize()
-    local vpX, vpY = Camera.ViewportSize.X, Camera.ViewportSize.Y
-    local land = vpX > vpY
-    local w = land and math.clamp(vpX * 0.72, 520, 840) or math.clamp(vpX * 0.94, 350, 500)
-    local h = land and math.clamp(vpY * 0.90, 320, 540) or math.clamp(vpY * 0.80, 440, 720)
-    return w, h, land
+-- ================= PARTICLE FIELD =================
+local particles = Instance.new("Frame")
+particles.Size = UDim2.new(1, 0, 1, 0)
+particles.BackgroundTransparency = 1
+particles.ZIndex = 2
+particles.ClipsDescendants = true
+particles.Parent = SG
+local particleDots = {}
+for i = 1, 40 do
+    local p = Instance.new("Frame")
+    p.Size = UDim2.new(0, math.random(2, 4), 0, math.random(2, 4))
+    p.Position = UDim2.new(math.random(), 0, math.random(), 0)
+    p.BackgroundColor3 = T.Accent
+    p.BackgroundTransparency = math.random(60, 85) / 100
+    p.BorderSizePixel = 0
+    p.ZIndex = 2
+    p.Parent = particles
+    Instance.new("UICorner", p).CornerRadius = UDim.new(1, 0)
+    table.insert(particleDots, {dot = p, speedY = math.random(10, 40) / 1000, speedX = math.random(-15, 15) / 1000})
 end
+task.spawn(function()
+    while particles.Parent do
+        for _, data in pairs(particleDots) do
+            local p = data.dot
+            local posY = p.Position.Y.Scale + data.speedY
+            local posX = p.Position.X.Scale + data.speedX
+            if posY > 1.05 then posY = -0.05; posX = math.random() end
+            if posX > 1.05 then posX = -0.05 elseif posX < -0.05 then posX = 1.05 end
+            p.Position = UDim2.new(posX, 0, posY, 0)
+        end
+        task.wait(0.03)
+    end
+end)
 
-local uiW, uiH, isLandscape = calcSize()
-
--- LOADING SCREEN
-local loadingScreen = Instance.new("Frame")
-loadingScreen.Size = UDim2.new(0, uiW, 0, uiH)
-loadingScreen.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
-loadingScreen.BackgroundColor3 = T.Bg
-loadingScreen.BackgroundTransparency = 0.02
-loadingScreen.BorderSizePixel = 0
-loadingScreen.ZIndex = 100
-loadingScreen.Parent = SG
-Instance.new("UICorner", loadingScreen).CornerRadius = UDim.new(0, 18)
-local loadStroke = Instance.new("UIStroke", loadingScreen)
+-- ================= LOADING SCREEN =================
+local loadRoot = Instance.new("Frame")
+loadRoot.Size = UDim2.new(0, uiW, 0, uiH)
+loadRoot.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
+loadRoot.BackgroundColor3 = T.Bg
+loadRoot.BackgroundTransparency = 0.02
+loadRoot.BorderSizePixel = 0
+loadRoot.ZIndex = 100
+loadRoot.Parent = SG
+Instance.new("UICorner", loadRoot).CornerRadius = CORNER
+local loadStroke = Instance.new("UIStroke", loadRoot)
 loadStroke.Color = T.Accent
 loadStroke.Thickness = 1
-loadStroke.Transparency = 0.3
+loadStroke.Transparency = 0.4
 
 local loadGlow = Instance.new("Frame")
-loadGlow.Size = UDim2.new(1, 30, 1, 30)
-loadGlow.Position = UDim2.new(0, -15, 0, -15)
+loadGlow.Size = UDim2.new(1, 40, 1, 40)
+loadGlow.Position = UDim2.new(0, -20, 0, -20)
 loadGlow.BackgroundColor3 = T.Accent
 loadGlow.BackgroundTransparency = 0.8
 loadGlow.BorderSizePixel = 0
 loadGlow.ZIndex = 99
-loadGlow.Parent = loadingScreen
-Instance.new("UICorner", loadGlow).CornerRadius = UDim.new(0, 24)
-TweenService:Create(loadGlow, TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-    {BackgroundTransparency = 0.55}):Play()
+loadGlow.Parent = loadRoot
+Instance.new("UICorner", loadGlow).CornerRadius = UDim.new(0, 32)
+TweenService:Create(loadGlow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+    {BackgroundTransparency = 0.5, Size = UDim2.new(1, 56, 1, 56), Position = UDim2.new(0, -28, 0, -28)}):Play()
 
 local loadRing = Instance.new("Frame")
-loadRing.Size = UDim2.new(0, 70, 0, 70)
-loadRing.Position = UDim2.new(0.5, -35, 0.5, -70)
+loadRing.Size = UDim2.new(0, 90, 0, 90)
+loadRing.Position = UDim2.new(0.5, -45, 0.5, -120)
 loadRing.BackgroundTransparency = 1
 loadRing.ZIndex = 101
-loadRing.Parent = loadingScreen
+loadRing.Parent = loadRoot
 local ringStroke = Instance.new("UIStroke", loadRing)
 ringStroke.Color = T.Accent
 ringStroke.Thickness = 3
-ringStroke.Transparency = 0.2
+ringStroke.Transparency = 0.1
 Instance.new("UICorner", loadRing).CornerRadius = UDim.new(1, 0)
 
-local loadText = Instance.new("TextLabel")
-loadText.Size = UDim2.new(1, 0, 0, 30)
-loadText.Position = UDim2.new(0, 0, 0.5, 20)
-loadText.Text = "LOADING SPENT HUB..."
-loadText.TextColor3 = T.Text
-loadText.BackgroundTransparency = 1
-loadText.Font = Enum.Font.GothamBold
-loadText.TextSize = 13
-loadText.ZIndex = 101
-loadText.Parent = loadingScreen
+local loadTitle = Instance.new("TextLabel")
+loadTitle.Size = UDim2.new(1, 0, 0, 36)
+loadTitle.Position = UDim2.new(0, 0, 0.5, -20)
+loadTitle.Text = ""
+loadTitle.TextColor3 = T.Text
+loadTitle.BackgroundTransparency = 1
+loadTitle.Font = Enum.Font.GothamBlack
+loadTitle.TextSize = 24
+loadTitle.ZIndex = 101
+loadTitle.Parent = loadRoot
 
--- typing effect
-task.spawn(function()
-    local txt = "LOADING SPENT HUB..."
-    while loadText.Parent and loadText.Text ~= txt do
-        for i = 1, #txt do
-            loadText.Text = txt:sub(1, i)
-            task.wait(0.03)
-        end
-        task.wait(0.2)
-    end
-end)
+local loadSubtitle = Instance.new("TextLabel")
+loadSubtitle.Size = UDim2.new(1, 0, 0, 20)
+loadSubtitle.Position = UDim2.new(0, 0, 0.5, 18)
+loadSubtitle.Text = "Initializing components..."
+loadSubtitle.TextColor3 = T.TextDim
+loadSubtitle.BackgroundTransparency = 1
+loadSubtitle.Font = Enum.Font.Gotham
+loadSubtitle.TextSize = 11
+loadSubtitle.ZIndex = 101
+loadSubtitle.Parent = loadRoot
 
-local loadProgress = Instance.new("Frame")
-loadProgress.Size = UDim2.new(0, 200, 0, 3)
-loadProgress.Position = UDim2.new(0.5, -100, 0.5, 60)
-loadProgress.BackgroundColor3 = T.PanelLight
-loadProgress.BorderSizePixel = 0
-loadProgress.ZIndex = 101
-loadProgress.Parent = loadingScreen
-Instance.new("UICorner", loadProgress).CornerRadius = UDim.new(1, 0)
+local loadBar = Instance.new("Frame")
+loadBar.Size = UDim2.new(0, 300, 0, 5)
+loadBar.Position = UDim2.new(0.5, -150, 0.5, 60)
+loadBar.BackgroundColor3 = T.PanelLight
+loadBar.BorderSizePixel = 0
+loadBar.ZIndex = 101
+loadBar.Parent = loadRoot
+Instance.new("UICorner", loadBar).CornerRadius = UDim.new(1, 0)
 
 local loadFill = Instance.new("Frame")
 loadFill.Size = UDim2.new(0, 0, 1, 0)
 loadFill.BackgroundColor3 = T.Accent
 loadFill.BorderSizePixel = 0
 loadFill.ZIndex = 102
-loadFill.Parent = loadProgress
+loadFill.Parent = loadBar
 Instance.new("UICorner", loadFill).CornerRadius = UDim.new(1, 0)
 local loadFillGrad = Instance.new("UIGradient")
-loadFillGrad.Color = ColorSequence.new(T.Accent, T.Accent2)
+loadFillGrad.Color = ColorSequence.new(T.Accent, T.Accent2, T.Accent3)
 loadFillGrad.Parent = loadFill
+
+local loadPercent = Instance.new("TextLabel")
+loadPercent.Size = UDim2.new(1, 0, 0, 20)
+loadPercent.Position = UDim2.new(0, 0, 0.5, 76)
+loadPercent.Text = "0%"
+loadPercent.TextColor3 = T.Accent
+loadPercent.BackgroundTransparency = 1
+loadPercent.Font = Enum.Font.GothamBold
+loadPercent.TextSize = 12
+loadPercent.ZIndex = 101
+loadPercent.Parent = loadRoot
+
+task.spawn(function()
+    local txt = "SPENT HUB"
+    while loadTitle.Parent and loadTitle.Text ~= txt do
+        for i = 1, #txt do
+            loadTitle.Text = txt:sub(1, i)
+            task.wait(0.04)
+        end
+    end
+end)
 
 task.spawn(function()
     local rot = 0
     while loadRing.Parent do
-        rot = (rot + 6) % 360
+        rot = (rot + 5) % 360
         loadRing.Rotation = rot
-        task.wait(0.02)
+        task.wait(0.016)
     end
 end)
 
-TweenService:Create(loadFill, TweenInfo.new(5, Enum.EasingStyle.Quad), {Size = UDim2.new(1, 0, 1, 0)}):Play()
-
--- MAIN FRAME (hidden initially)
-local Main = Instance.new("Frame")
-Main.Size = UDim2.new(0, uiW, 0, uiH)
-Main.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
-Main.BackgroundColor3 = T.Bg
-Main.BackgroundTransparency = 0.02
-Main.BorderSizePixel = 0
-Main.Visible = false
-Main.Parent = SG
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 18)
-
-local glow = Instance.new("Frame")
-glow.Size = UDim2.new(1, 32, 1, 32)
-glow.Position = UDim2.new(0, -16, 0, -16)
-glow.BackgroundColor3 = T.Accent
-glow.BackgroundTransparency = 0.85
-glow.BorderSizePixel = 0
-glow.ZIndex = 0
-glow.Parent = Main
-Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 28)
-TweenService:Create(glow, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-    {BackgroundTransparency = 0.55, Size = UDim2.new(1, 44, 1, 44), Position = UDim2.new(0, -22, 0, -22)}):Play()
-
-local stroke = Instance.new("UIStroke", Main)
-stroke.Color = T.StrokeLight
-stroke.Thickness = 1
-stroke.Transparency = 0.3
-
-local aurora = Instance.new("Frame")
-aurora.Size = UDim2.new(1, 0, 1, 0)
-aurora.BackgroundColor3 = T.Bg
-aurora.BorderSizePixel = 0
-aurora.ClipsDescendants = true
-aurora.ZIndex = 1
-aurora.Parent = Main
-Instance.new("UICorner", aurora).CornerRadius = UDim.new(0, 18)
-local auroraGrad = Instance.new("UIGradient")
-auroraGrad.Color = ColorSequence.new({
-    ColorSequenceKeypoint.new(0, Color3.fromRGB(45, 25, 80)),
-    ColorSequenceKeypoint.new(0.35, Color3.fromRGB(10, 10, 20)),
-    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(60, 25, 90)),
-    ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 30))
-})
-auroraGrad.Rotation = 45
-auroraGrad.Parent = aurora
 task.spawn(function()
-    while aurora.Parent do
-        auroraGrad.Rotation = (auroraGrad.Rotation + 0.5) % 360
-        task.wait(0.03)
+    local start = tick()
+    while loadFill.Parent and tick() - start < 5 do
+        local p = math.min(1, (tick() - start) / 5)
+        loadFill.Size = UDim2.new(p, 0, 1, 0)
+        loadPercent.Text = math.floor(p * 100) .. "%"
+        task.wait(0.05)
     end
 end)
 
-local scan = Instance.new("Frame")
-scan.Size = UDim2.new(1, 0, 1, 0)
-scan.BackgroundTransparency = 1
-scan.ZIndex = 2
-scan.ClipsDescendants = true
-scan.Parent = Main
-Instance.new("UICorner", scan).CornerRadius = UDim.new(0, 18)
-for i = 0, 60 do
-    local line = Instance.new("Frame")
-    line.Size = UDim2.new(1, 0, 0, 1)
-    line.Position = UDim2.new(0, 0, i/60, 0)
-    line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    line.BackgroundTransparency = 0.965
-    line.BorderSizePixel = 0
-    line.ZIndex = 2
-    line.Parent = scan
-end
-
-local noise = Instance.new("Frame")
-noise.Size = UDim2.new(1, 0, 1, 0)
-noise.BackgroundTransparency = 1
-noise.ZIndex = 2
-noise.ClipsDescendants = true
-noise.Parent = Main
-Instance.new("UICorner", noise).CornerRadius = UDim.new(0, 18)
-for i = 1, 180 do
-    local dot = Instance.new("Frame")
-    dot.Size = UDim2.new(0, 1, 0, 1)
-    dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
-    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    dot.BackgroundTransparency = math.random(80, 95) / 100
-    dot.BorderSizePixel = 0
-    dot.ZIndex = 2
-    dot.Parent = noise
-end
-
-local sweep = Instance.new("Frame")
-sweep.Size = UDim2.new(0.18, 0, 1.6, 0)
-sweep.Position = UDim2.new(-0.4, 0, -0.3, 0)
-sweep.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-sweep.BackgroundTransparency = 0.93
-sweep.BorderSizePixel = 0
-sweep.Rotation = 22
-sweep.ZIndex = 3
-sweep.Parent = Main
-Instance.new("UICorner", sweep).CornerRadius = UDim.new(0, 18)
-task.spawn(function()
-    while sweep.Parent do
-        sweep.Position = UDim2.new(-0.4, 0, -0.3, 0)
-        TweenService:Create(sweep, TweenInfo.new(2.8, Enum.EasingStyle.Sine), {Position = UDim2.new(1.6, 0, -0.3, 0)}):Play()
-        task.wait(3.8)
-    end
-end)
-
--- cursor spotlight
-local spotlight = Instance.new("Frame")
-spotlight.Size = UDim2.new(0, 300, 0, 300)
-spotlight.BackgroundColor3 = T.Accent
-spotlight.BackgroundTransparency = 0.95
-spotlight.BorderSizePixel = 0
-spotlight.ZIndex = 3
-spotlight.Parent = Main
-Instance.new("UICorner", spotlight).CornerRadius = UDim.new(1, 0)
-
--- NOTIFICATIONS
+-- ================= NOTIFICATIONS =================
 local notifContainer = Instance.new("Frame")
 notifContainer.Size = UDim2.new(0, 340, 1, -80)
 notifContainer.Position = UDim2.new(1, -360, 0, 60)
@@ -601,7 +548,7 @@ local function notify(title, text, type)
     n.BorderSizePixel = 0
     n.ZIndex = 201
     n.Parent = notifContainer
-    Instance.new("UICorner", n).CornerRadius = UDim.new(0, 12)
+    Instance.new("UICorner", n).CornerRadius = CORNER
     local nStroke = Instance.new("UIStroke", n)
     nStroke.Color = color
     nStroke.Thickness = 1
@@ -647,22 +594,158 @@ local function notify(title, text, type)
 end
 getgenv().SpentHubNotify = notify
 
+-- ================= MAIN WINDOW =================
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, uiW, 0, uiH)
+Main.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
+Main.BackgroundColor3 = T.Bg
+Main.BackgroundTransparency = 0.02
+Main.BorderSizePixel = 0
+Main.Visible = false
+Main.Parent = SG
+Instance.new("UICorner", Main).CornerRadius = CORNER
+
+local glow = Instance.new("Frame")
+glow.Size = UDim2.new(1, 40, 1, 40)
+glow.Position = UDim2.new(0, -20, 0, -20)
+glow.BackgroundColor3 = T.Accent
+glow.BackgroundTransparency = 0.85
+glow.BorderSizePixel = 0
+glow.ZIndex = 0
+glow.Parent = Main
+Instance.new("UICorner", glow).CornerRadius = UDim.new(0, 32)
+TweenService:Create(glow, TweenInfo.new(2.4, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+    {BackgroundTransparency = 0.55, Size = UDim2.new(1, 56, 1, 56), Position = UDim2.new(0, -28, 0, -28)}):Play()
+
+local stroke = Instance.new("UIStroke", Main)
+stroke.Color = T.StrokeLight
+stroke.Thickness = 1
+stroke.Transparency = 0.3
+
+-- gradient accent border
+local borderGrad = Instance.new("Frame")
+borderGrad.Size = UDim2.new(1, 4, 1, 4)
+borderGrad.Position = UDim2.new(0, -2, 0, -2)
+borderGrad.BackgroundColor3 = T.Accent
+borderGrad.BackgroundTransparency = 1
+borderGrad.BorderSizePixel = 0
+borderGrad.ZIndex = 0
+borderGrad.Parent = Main
+Instance.new("UICorner", borderGrad).CornerRadius = CORNER
+local borderGradUI = Instance.new("UIGradient")
+borderGradUI.Color = ColorSequence.new(T.Accent, T.Accent2, T.Accent3, T.Accent)
+borderGradUI.Rotation = 0
+borderGradUI.Parent = borderGrad
+task.spawn(function()
+    while borderGrad.Parent do
+        borderGradUI.Rotation = (borderGradUI.Rotation + 1) % 360
+        task.wait(0.04)
+    end
+end)
+
+local aurora = Instance.new("Frame")
+aurora.Size = UDim2.new(1, 0, 1, 0)
+aurora.BackgroundColor3 = T.Bg
+aurora.BorderSizePixel = 0
+aurora.ClipsDescendants = true
+aurora.ZIndex = 1
+aurora.Parent = Main
+Instance.new("UICorner", aurora).CornerRadius = CORNER
+local auroraGrad = Instance.new("UIGradient")
+auroraGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(50, 28, 90)),
+    ColorSequenceKeypoint.new(0.35, Color3.fromRGB(10, 10, 20)),
+    ColorSequenceKeypoint.new(0.7, Color3.fromRGB(65, 28, 100)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(15, 15, 30))
+})
+auroraGrad.Rotation = 45
+auroraGrad.Parent = aurora
+task.spawn(function()
+    while aurora.Parent do
+        auroraGrad.Rotation = (auroraGrad.Rotation + 0.5) % 360
+        task.wait(0.03)
+    end
+end)
+
+local scan = Instance.new("Frame")
+scan.Size = UDim2.new(1, 0, 1, 0)
+scan.BackgroundTransparency = 1
+scan.ZIndex = 2
+scan.ClipsDescendants = true
+scan.Parent = Main
+Instance.new("UICorner", scan).CornerRadius = CORNER
+for i = 0, 60 do
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(1, 0, 0, 1)
+    line.Position = UDim2.new(0, 0, i/60, 0)
+    line.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    line.BackgroundTransparency = 0.965
+    line.BorderSizePixel = 0
+    line.ZIndex = 2
+    line.Parent = scan
+end
+
+local noise = Instance.new("Frame")
+noise.Size = UDim2.new(1, 0, 1, 0)
+noise.BackgroundTransparency = 1
+noise.ZIndex = 2
+noise.ClipsDescendants = true
+noise.Parent = Main
+Instance.new("UICorner", noise).CornerRadius = CORNER
+for i = 1, 180 do
+    local dot = Instance.new("Frame")
+    dot.Size = UDim2.new(0, 1, 0, 1)
+    dot.Position = UDim2.new(math.random(), 0, math.random(), 0)
+    dot.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    dot.BackgroundTransparency = math.random(82, 95) / 100
+    dot.BorderSizePixel = 0
+    dot.ZIndex = 2
+    dot.Parent = noise
+end
+
+local sweep = Instance.new("Frame")
+sweep.Size = UDim2.new(0.18, 0, 1.6, 0)
+sweep.Position = UDim2.new(-0.4, 0, -0.3, 0)
+sweep.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+sweep.BackgroundTransparency = 0.93
+sweep.BorderSizePixel = 0
+sweep.Rotation = 22
+sweep.ZIndex = 3
+sweep.Parent = Main
+Instance.new("UICorner", sweep).CornerRadius = CORNER
+task.spawn(function()
+    while sweep.Parent do
+        sweep.Position = UDim2.new(-0.4, 0, -0.3, 0)
+        TweenService:Create(sweep, TweenInfo.new(2.8, Enum.EasingStyle.Sine), {Position = UDim2.new(1.6, 0, -0.3, 0)}):Play()
+        task.wait(3.6)
+    end
+end)
+
+local spotlight = Instance.new("Frame")
+spotlight.Size = UDim2.new(0, 360, 0, 360)
+spotlight.BackgroundColor3 = T.Accent
+spotlight.BackgroundTransparency = 0.95
+spotlight.BorderSizePixel = 0
+spotlight.ZIndex = 3
+spotlight.Parent = Main
+Instance.new("UICorner", spotlight).CornerRadius = UDim.new(1, 0)
+
 -- TITLE BAR
 local Title = Instance.new("Frame")
-Title.Size = UDim2.new(1, 0, 0, 48)
+Title.Size = UDim2.new(1, 0, 0, 52)
 Title.BackgroundColor3 = T.Panel
 Title.BackgroundTransparency = 0.1
 Title.ZIndex = 4
 Title.Parent = Main
-Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 18)
+Instance.new("UICorner", Title).CornerRadius = CORNER
 local titleStroke = Instance.new("UIStroke", Title)
 titleStroke.Color = T.StrokeLight
 titleStroke.Thickness = 1
 titleStroke.Transparency = 0.4
 
 local accentBar = Instance.new("Frame")
-accentBar.Size = UDim2.new(0, 4, 0, 24)
-accentBar.Position = UDim2.new(0, 18, 0.5, -12)
+accentBar.Size = UDim2.new(0, 4, 0, 28)
+accentBar.Position = UDim2.new(0, 20, 0.5, -14)
 accentBar.BackgroundColor3 = T.Accent
 accentBar.BorderSizePixel = 0
 accentBar.ZIndex = 5
@@ -673,37 +756,24 @@ accentGrad.Color = ColorSequence.new(T.Accent, T.Accent2)
 accentGrad.Parent = accentBar
 task.spawn(function()
     TweenService:Create(accentBar, TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-        {Size = UDim2.new(0, 4, 0, 32), Position = UDim2.new(0, 18, 0.5, -16)}):Play()
+        {Size = UDim2.new(0, 4, 0, 36), Position = UDim2.new(0, 20, 0.5, -18)}):Play()
 end)
 
 local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -180, 1, 0)
-TitleLabel.Position = UDim2.new(0, 32, 0, 0)
-TitleLabel.Text = ""
+TitleLabel.Position = UDim2.new(0, 34, 0, 0)
+TitleLabel.Text = "SPENT HUB"
 TitleLabel.TextColor3 = T.Text
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Font = Enum.Font.GothamBlack
-TitleLabel.TextSize = 15
+TitleLabel.TextSize = 16
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.ZIndex = 5
 TitleLabel.Parent = Title
 
-task.spawn(function()
-    local txt = "SPENT HUB"
-    while TitleLabel.Parent do
-        for i = 1, #txt do
-            TitleLabel.Text = txt:sub(1, i)
-            task.wait(0.055)
-        end
-        task.wait(5)
-        TitleLabel.Text = ""
-        task.wait(0.2)
-    end
-end)
-
 local deviceText = Instance.new("TextLabel")
 deviceText.Size = UDim2.new(0, 200, 1, 0)
-deviceText.Position = UDim2.new(1, -420, 0, 0)
+deviceText.Position = UDim2.new(1, -440, 0, 0)
 deviceText.Text = (isPC and "PC" or isMobile and "Mobile" or "Hybrid") .. " | " .. (isLandscape and "Landscape" or "Portrait")
 deviceText.TextColor3 = T.TextDim
 deviceText.BackgroundTransparency = 1
@@ -714,8 +784,8 @@ deviceText.ZIndex = 5
 deviceText.Parent = Title
 
 local MinBtn = Instance.new("TextButton")
-MinBtn.Size = UDim2.new(0, 32, 0, 32)
-MinBtn.Position = UDim2.new(1, -76, 0.5, -16)
+MinBtn.Size = UDim2.new(0, 36, 0, 36)
+MinBtn.Position = UDim2.new(1, -84, 0.5, -18)
 MinBtn.Text = "—"
 MinBtn.TextColor3 = T.TextDim
 MinBtn.BackgroundColor3 = T.PanelLight
@@ -723,11 +793,11 @@ MinBtn.Font = Enum.Font.GothamBold
 MinBtn.BorderSizePixel = 0
 MinBtn.ZIndex = 5
 MinBtn.Parent = Title
-Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", MinBtn).CornerRadius = CORNER
 
 local Close = Instance.new("TextButton")
-Close.Size = UDim2.new(0, 32, 0, 32)
-Close.Position = UDim2.new(1, -40, 0.5, -16)
+Close.Size = UDim2.new(0, 36, 0, 36)
+Close.Position = UDim2.new(1, -44, 0.5, -18)
 Close.Text = "X"
 Close.TextColor3 = T.Text
 Close.BackgroundColor3 = T.PanelLight
@@ -735,16 +805,15 @@ Close.Font = Enum.Font.GothamBold
 Close.BorderSizePixel = 0
 Close.ZIndex = 5
 Close.Parent = Title
-Instance.new("UICorner", Close).CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", Close).CornerRadius = CORNER
 Close.MouseButton1Click:Connect(function()
     cleanupAllESP()
     notify("Spent Hub", "Hub closed", "error")
-    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1}):Play()
-    task.wait(0.3)
+    TweenService:Create(Main, TweenInfo.new(0.35, Enum.EasingStyle.Quart), {Size = UDim2.new(0, 0, 0, 0), Position = UDim2.new(0.5, 0, 0.5, 0), BackgroundTransparency = 1}):Play()
+    task.wait(0.35)
     SG:Destroy()
 end)
 
--- drag
 local dragging, dragStart, frameStart
 Title.InputBegan:Connect(function(i)
     if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
@@ -759,7 +828,6 @@ Title.InputChanged:Connect(function(i)
 end)
 Title.InputEnded:Connect(function() dragging = false end)
 
--- parallax + spotlight
 UserInputService.InputChanged:Connect(function(i)
     if i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
     local absX, absY = Main.AbsolutePosition.X, Main.AbsolutePosition.Y
@@ -768,34 +836,35 @@ UserInputService.InputChanged:Connect(function(i)
     local relY = (i.Position.Y - absY) / math.max(wY, 1)
     if relX > -0.15 and relX < 1.15 and relY > -0.15 and relY < 1.15 then
         auroraGrad.Rotation = 45 + relX * 80
-        glow.Position = UDim2.new(0, -16 + relX * 6, 0, -16 + relY * 6)
-        spotlight.Position = UDim2.new(relX, -150, relY, -150)
+        glow.Position = UDim2.new(0, -20 + relX * 8, 0, -20 + relY * 8)
+        spotlight.Position = UDim2.new(relX, -180, relY, -180)
     end
 end)
 
 local minimized = false
 local fullSize = UDim2.new(0, uiW, 0, uiH)
+local hiddenUI = false
 MinBtn.MouseButton1Click:Connect(function()
     minimized = not minimized
     MinBtn.Text = minimized and "+" or "—"
     notify("Spent Hub", minimized and "Minimized" or "Restored", "default")
-    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = minimized and UDim2.new(0, uiW, 0, 48) or fullSize}):Play()
+    TweenService:Create(Main, TweenInfo.new(0.3, Enum.EasingStyle.Quart), {Size = minimized and UDim2.new(0, uiW, 0, 52) or fullSize}):Play()
 end)
 
 -- BODY
 local Body = Instance.new("Frame")
-Body.Size = isLandscape and UDim2.new(1, 0, 1, -48) or UDim2.new(1, 0, 1, -108)
-Body.Position = UDim2.new(0, 0, 0, 48)
+Body.Size = isLandscape and UDim2.new(1, 0, 1, -52) or UDim2.new(1, 0, 1, -112)
+Body.Position = UDim2.new(0, 0, 0, 52)
 Body.BackgroundTransparency = 1
 Body.ZIndex = 4
 Body.Parent = Main
 
 local Sidebar = Instance.new("Frame")
 if isLandscape then
-    Sidebar.Size = UDim2.new(0, 160, 1, -20)
+    Sidebar.Size = UDim2.new(0, 168, 1, -20)
     Sidebar.Position = UDim2.new(0, 10, 0, 10)
 else
-    Sidebar.Size = UDim2.new(1, -20, 0, 52)
+    Sidebar.Size = UDim2.new(1, -20, 0, 56)
     Sidebar.Position = UDim2.new(0, 10, 0, 10)
 end
 Sidebar.BackgroundColor3 = T.Panel
@@ -803,7 +872,7 @@ Sidebar.BackgroundTransparency = 0.1
 Sidebar.BorderSizePixel = 0
 Sidebar.ZIndex = 5
 Sidebar.Parent = Body
-Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 14)
+Instance.new("UICorner", Sidebar).CornerRadius = CORNER
 local sideStroke = Instance.new("UIStroke", Sidebar)
 sideStroke.Color = T.StrokeLight
 sideStroke.Thickness = 1
@@ -814,22 +883,22 @@ sidebarLayout.FillDirection = isLandscape and Enum.FillDirection.Vertical or Enu
 sidebarLayout.Padding = UDim.new(0, 5)
 sidebarLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 sidebarLayout.VerticalAlignment = isLandscape and Enum.VerticalAlignment.Top or Enum.VerticalAlignment.Center
-if isLandscape then Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 8) end
+if isLandscape then Instance.new("UIPadding", Sidebar).PaddingTop = UDim.new(0, 10) end
 
 local Pages = Instance.new("Frame")
 if isLandscape then
-    Pages.Size = UDim2.new(1, -190, 1, -20)
-    Pages.Position = UDim2.new(0, 180, 0, 10)
+    Pages.Size = UDim2.new(1, -198, 1, -20)
+    Pages.Position = UDim2.new(0, 188, 0, 10)
 else
-    Pages.Size = UDim2.new(1, -20, 1, -140)
-    Pages.Position = UDim2.new(0, 10, 0, 72)
+    Pages.Size = UDim2.new(1, -20, 1, -148)
+    Pages.Position = UDim2.new(0, 10, 0, 76)
 end
 Pages.BackgroundColor3 = T.Panel
 Pages.BackgroundTransparency = 0.1
 Pages.BorderSizePixel = 0
 Pages.ZIndex = 5
 Pages.Parent = Body
-Instance.new("UICorner", Pages).CornerRadius = UDim.new(0, 14)
+Instance.new("UICorner", Pages).CornerRadius = CORNER
 local pageStroke = Instance.new("UIStroke", Pages)
 pageStroke.Color = T.StrokeLight
 pageStroke.Thickness = 1
@@ -861,7 +930,7 @@ CombatPage.Visible = true
 local tabs = {}
 local function makeTab(name, page, order)
     local b = Instance.new("TextButton")
-    if isLandscape then b.Size = UDim2.new(1, -16, 0, 44)
+    if isLandscape then b.Size = UDim2.new(1, -16, 0, 46)
     else b.Size = UDim2.new(0, 100, 1, -8) end
     b.BackgroundColor3 = T.Bg
     b.Text = name
@@ -872,12 +941,12 @@ local function makeTab(name, page, order)
     b.LayoutOrder = order
     b.ZIndex = 6
     b.Parent = Sidebar
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", b).CornerRadius = CORNER
 
     local indicator = Instance.new("Frame")
     if isLandscape then
-        indicator.Size = UDim2.new(0, 3, 0, 20)
-        indicator.Position = UDim2.new(0, 0, 0.5, -10)
+        indicator.Size = UDim2.new(0, 3, 0, 22)
+        indicator.Position = UDim2.new(0, 0, 0.5, -11)
     else
         indicator.Size = UDim2.new(0, 20, 0, 3)
         indicator.Position = UDim2.new(0.5, -10, 1, -4)
@@ -888,16 +957,19 @@ local function makeTab(name, page, order)
     indicator.ZIndex = 7
     indicator.Parent = b
     Instance.new("UICorner", indicator).CornerRadius = UDim.new(1, 0)
+    local indGrad = Instance.new("UIGradient")
+    indGrad.Color = ColorSequence.new(T.Accent, T.Accent2)
+    indGrad.Parent = indicator
 
     tabs[name] = {button = b, indicator = indicator, page = page}
     b.MouseEnter:Connect(function()
         if not tabs[name].indicator.Visible then
-            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.PanelLight, Size = isLandscape and UDim2.new(1, -16, 0, 46) or UDim2.new(0, 102, 1, -8)}):Play()
+            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.PanelLight}):Play()
         end
     end)
     b.MouseLeave:Connect(function()
         if not tabs[name].indicator.Visible then
-            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.Bg, Size = isLandscape and UDim2.new(1, -16, 0, 44) or UDim2.new(0, 100, 1, -8)}):Play()
+            TweenService:Create(b, TweenInfo.new(0.15), {BackgroundColor3 = T.Bg}):Play()
         end
     end)
     b.MouseButton1Click:Connect(function()
@@ -944,14 +1016,14 @@ end
 
 local function newToggle(parent, label, order, initial, cb)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, -16, 0, 44)
+    f.Size = UDim2.new(1, -16, 0, 46)
     f.BackgroundColor3 = T.PanelLight
     f.BackgroundTransparency = 0.1
     f.BorderSizePixel = 0
     f.LayoutOrder = order or 0
     f.ZIndex = 7
     f.Parent = parent
-    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", f).CornerRadius = CORNER
     local fStroke = Instance.new("UIStroke", f)
     fStroke.Color = T.Stroke
     fStroke.Thickness = 1
@@ -970,8 +1042,8 @@ local function newToggle(parent, label, order, initial, cb)
     l.Parent = f
 
     local track = Instance.new("Frame")
-    track.Size = UDim2.new(0, 44, 0, 22)
-    track.Position = UDim2.new(1, -56, 0.5, -11)
+    track.Size = UDim2.new(0, 46, 0, 24)
+    track.Position = UDim2.new(1, -58, 0.5, -12)
     track.BackgroundColor3 = initial and T.Green or T.Panel
     track.BorderSizePixel = 0
     track.ZIndex = 8
@@ -979,8 +1051,8 @@ local function newToggle(parent, label, order, initial, cb)
     Instance.new("UICorner", track).CornerRadius = UDim.new(1, 0)
 
     local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 16, 0, 16)
-    knob.Position = initial and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
+    knob.Size = UDim2.new(0, 18, 0, 18)
+    knob.Position = initial and UDim2.new(1, -22, 0.5, -9) or UDim2.new(0, 4, 0.5, -9)
     knob.BackgroundColor3 = T.Text
     knob.BorderSizePixel = 0
     knob.ZIndex = 9
@@ -991,7 +1063,7 @@ local function newToggle(parent, label, order, initial, cb)
     local function setState(v, anim)
         state = v
         if cb then cb(v) end
-        local targetPos = v and UDim2.new(1, -20, 0.5, -8) or UDim2.new(0, 4, 0.5, -8)
+        local targetPos = v and UDim2.new(1, -22, 0.5, -9) or UDim2.new(0, 4, 0.5, -9)
         local targetColor = v and T.Green or T.Panel
         if anim then
             TweenService:Create(knob, TweenInfo.new(0.15, Enum.EasingStyle.Quad), {Position = targetPos}):Play()
@@ -1020,14 +1092,14 @@ end
 
 local function newSlider(parent, label, min, max, def, order, cb)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, -16, 0, 56)
+    f.Size = UDim2.new(1, -16, 0, 58)
     f.BackgroundColor3 = T.PanelLight
     f.BackgroundTransparency = 0.1
     f.BorderSizePixel = 0
     f.LayoutOrder = order or 0
     f.ZIndex = 7
     f.Parent = parent
-    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", f).CornerRadius = CORNER
     local fStroke = Instance.new("UIStroke", f)
     fStroke.Color = T.Stroke
     fStroke.Thickness = 1
@@ -1059,7 +1131,7 @@ local function newSlider(parent, label, min, max, def, order, cb)
 
     local bar = Instance.new("Frame")
     bar.Size = UDim2.new(1, -28, 0, 6)
-    bar.Position = UDim2.new(0, 14, 0, 34)
+    bar.Position = UDim2.new(0, 14, 0, 36)
     bar.BackgroundColor3 = T.Panel
     bar.BorderSizePixel = 0
     bar.ZIndex = 8
@@ -1079,8 +1151,8 @@ local function newSlider(parent, label, min, max, def, order, cb)
     fillGrad.Parent = fill
 
     local knob = Instance.new("TextButton")
-    knob.Size = UDim2.new(0, 14, 0, 14)
-    knob.Position = UDim2.new((def-min)/(max-min), -7, 0.5, -7)
+    knob.Size = UDim2.new(0, 16, 0, 16)
+    knob.Position = UDim2.new((def-min)/(max-min), -8, 0.5, -8)
     knob.Text = ""
     knob.BackgroundColor3 = T.Text
     knob.BorderSizePixel = 0
@@ -1093,7 +1165,7 @@ local function newSlider(parent, label, min, max, def, order, cb)
         local p = math.clamp((x - bar.AbsolutePosition.X)/bar.AbsoluteSize.X, 0, 1)
         local v = math.floor(min + (max-min)*p)
         fill.Size = UDim2.new(p, 0, 1, 0)
-        knob.Position = UDim2.new(p, -7, 0.5, -7)
+        knob.Position = UDim2.new(p, -8, 0.5, -8)
         valLabel.Text = tostring(v)
         if cb then cb(v) end
     end
@@ -1111,14 +1183,14 @@ end
 
 local function newCycle(parent, label, options, def, order, cb)
     local f = Instance.new("Frame")
-    f.Size = UDim2.new(1, -16, 0, 44)
+    f.Size = UDim2.new(1, -16, 0, 46)
     f.BackgroundColor3 = T.PanelLight
     f.BackgroundTransparency = 0.1
     f.BorderSizePixel = 0
     f.LayoutOrder = order or 0
     f.ZIndex = 7
     f.Parent = parent
-    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 10)
+    Instance.new("UICorner", f).CornerRadius = CORNER
 
     local l = Instance.new("TextLabel")
     l.Size = UDim2.new(1, -100, 1, 0)
@@ -1133,8 +1205,8 @@ local function newCycle(parent, label, options, def, order, cb)
     l.Parent = f
 
     local btn = Instance.new("TextButton")
-    btn.Size = UDim2.new(0, 78, 0, 26)
-    btn.Position = UDim2.new(1, -90, 0.5, -13)
+    btn.Size = UDim2.new(0, 80, 0, 28)
+    btn.Position = UDim2.new(1, -92, 0.5, -14)
     btn.Text = def
     btn.TextColor3 = T.Accent
     btn.BackgroundColor3 = T.Bg
@@ -1143,7 +1215,7 @@ local function newCycle(parent, label, options, def, order, cb)
     btn.BorderSizePixel = 0
     btn.ZIndex = 8
     btn.Parent = f
-    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    Instance.new("UICorner", btn).CornerRadius = CORNER
 
     local idx = 1
     for i, o in ipairs(options) do if o == def then idx = i end end
@@ -1172,10 +1244,10 @@ end)
 newCycle(CombatPage, "Target Part", {"Head","HumanoidRootPart","Random"}, "HumanoidRootPart", 5, function(v) SilentAimSettings.TargetPart = v end)
 newCycle(CombatPage, "Method", {"Raycast","FindPartOnRay","FindPartOnRayWithWhitelist","FindPartOnRayWithIgnoreList","Mouse.Hit/Target"}, "Raycast", 6, function(v) SilentAimSettings.SilentAimMethod = v end)
 newSlider(CombatPage, "Hit Chance", 0, 100, 100, 7, function(v) SilentAimSettings.HitChance = v end)
-newLabel(CombatPage, "WHITELIST", 8, true)
 
+newLabel(CombatPage, "WHITELIST", 8, true)
 local wlInput = Instance.new("TextBox")
-wlInput.Size = UDim2.new(1, -16, 0, 40)
+wlInput.Size = UDim2.new(1, -16, 0, 42)
 wlInput.BackgroundColor3 = T.PanelLight
 wlInput.TextColor3 = T.Text
 wlInput.PlaceholderText = "Enter username to whitelist"
@@ -1187,10 +1259,10 @@ wlInput.BorderSizePixel = 0
 wlInput.LayoutOrder = 9
 wlInput.ZIndex = 7
 wlInput.Parent = CombatPage
-Instance.new("UICorner", wlInput).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", wlInput).CornerRadius = CORNER
 
 local wlBtn = Instance.new("TextButton")
-wlBtn.Size = UDim2.new(1, -16, 0, 40)
+wlBtn.Size = UDim2.new(1, -16, 0, 42)
 wlBtn.BackgroundColor3 = T.PanelLight
 wlBtn.Text = "Add to Whitelist"
 wlBtn.TextColor3 = T.Text
@@ -1200,7 +1272,7 @@ wlBtn.BorderSizePixel = 0
 wlBtn.LayoutOrder = 10
 wlBtn.ZIndex = 7
 wlBtn.Parent = CombatPage
-Instance.new("UICorner", wlBtn).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", wlBtn).CornerRadius = CORNER
 wlBtn.MouseButton1Click:Connect(function()
     local name = wlInput.Text
     if name and #name > 0 then
@@ -1258,7 +1330,7 @@ newSlider(ESPPage, "ESP Max Distance", 100, 5000, 1000, 10, function(v) ESPSetti
 newLabel(ConfigPage, "CONFIGURATION", 1, true)
 local configName = "config1"
 local nameBox = Instance.new("TextBox")
-nameBox.Size = UDim2.new(1, -16, 0, 40)
+nameBox.Size = UDim2.new(1, -16, 0, 42)
 nameBox.BackgroundColor3 = T.PanelLight
 nameBox.TextColor3 = T.Text
 nameBox.PlaceholderText = "Config name"
@@ -1270,13 +1342,13 @@ nameBox.BorderSizePixel = 0
 nameBox.LayoutOrder = 2
 nameBox.ZIndex = 7
 nameBox.Parent = ConfigPage
-Instance.new("UICorner", nameBox).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", nameBox).CornerRadius = CORNER
 nameBox:GetPropertyChangedSignal("Text"):Connect(function()
     if nameBox.Text and #nameBox.Text > 0 then configName = nameBox.Text end
 end)
 
 local saveBtn = Instance.new("TextButton")
-saveBtn.Size = UDim2.new(1, -16, 0, 40)
+saveBtn.Size = UDim2.new(1, -16, 0, 42)
 saveBtn.BackgroundColor3 = T.PanelLight
 saveBtn.Text = "Save Config"
 saveBtn.TextColor3 = T.Text
@@ -1286,7 +1358,7 @@ saveBtn.BorderSizePixel = 0
 saveBtn.LayoutOrder = 3
 saveBtn.ZIndex = 7
 saveBtn.Parent = ConfigPage
-Instance.new("UICorner", saveBtn).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", saveBtn).CornerRadius = CORNER
 saveBtn.MouseButton1Click:Connect(function()
     if configName and configName ~= "" then
         UpdateFile(configName)
@@ -1295,7 +1367,7 @@ saveBtn.MouseButton1Click:Connect(function()
 end)
 
 local loadBtn = Instance.new("TextButton")
-loadBtn.Size = UDim2.new(1, -16, 0, 40)
+loadBtn.Size = UDim2.new(1, -16, 0, 42)
 loadBtn.BackgroundColor3 = T.PanelLight
 loadBtn.Text = "Load Config"
 loadBtn.TextColor3 = T.Text
@@ -1305,7 +1377,7 @@ loadBtn.BorderSizePixel = 0
 loadBtn.LayoutOrder = 4
 loadBtn.ZIndex = 7
 loadBtn.Parent = ConfigPage
-Instance.new("UICorner", loadBtn).CornerRadius = UDim.new(0, 10)
+Instance.new("UICorner", loadBtn).CornerRadius = CORNER
 loadBtn.MouseButton1Click:Connect(function()
     if configName and configName ~= "" then
         local ok = pcall(function() LoadFile(configName) end)
@@ -1322,7 +1394,6 @@ loadBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- keybinds
 UserInputService.InputBegan:Connect(function(i, gp)
     if gp then return end
     if i.KeyCode == Keybinds.SilentAim then
@@ -1335,11 +1406,14 @@ UserInputService.InputBegan:Connect(function(i, gp)
     elseif i.KeyCode == Keybinds.FOV then
         SilentAimSettings.FOVVisible = not SilentAimSettings.FOVVisible
         fov_circle.Visible = SilentAimSettings.FOVVisible
-        notify("Keybind", "FOV Circle: " .. (SilentAimSettings.FOVVisible and "ON" or "OFF"), SilentAimSettings.FOVVisible and "success" or "error")
+        notify("Keybind", "FOV: " .. (SilentAimSettings.FOVVisible and "ON" or "OFF"), SilentAimSettings.FOVVisible and "success" or "error")
+    elseif i.KeyCode == Keybinds.HideUI then
+        hiddenUI = not hiddenUI
+        Main.Visible = not hiddenUI
+        notify("UI", hiddenUI and "Hidden (RightShift to show)" or "Shown", "default")
     end
 end)
 
--- silent aim loop
 RenderStepped:Connect(function()
     if SilentAimSettings.Enabled and SilentAimSettings.ShowSilentAimTarget then
         local target = getClosestPlayer()
@@ -1360,7 +1434,6 @@ RenderStepped:Connect(function()
     end
 end)
 
--- ESP loop
 Heartbeat:Connect(function()
     if not ESPSettings.Enabled then
         for _, d in pairs(ESPdrawings or {}) do resetESPDrawings(d, false) end
@@ -1380,7 +1453,7 @@ Heartbeat:Connect(function()
     end
 end)
 
--- hooks (untouched silent aim core)
+-- silent aim hooks (UNTOUCHED)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -1446,7 +1519,6 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     return oldIndex(self, Index)
 end))
 
--- re-layout
 Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     local newW, newH, land = calcSize()
     uiW, uiH, isLandscape = newW, newH, land
@@ -1455,18 +1527,17 @@ Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     fullSize = UDim2.new(0, uiW, 0, uiH)
 end)
 
--- 5 SECOND LOADING SEQUENCE
 task.spawn(function()
     task.wait(5)
-    if loadingScreen.Parent then
+    if loadRoot.Parent then
         notify("Spent Hub", "Loaded successfully | " .. (isPC and "PC" or isMobile and "Mobile" or "Hybrid"), "success")
-        TweenService:Create(loadingScreen, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
+        TweenService:Create(loadRoot, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
             Size = UDim2.new(0, 0, 0, 0),
             Position = UDim2.new(0.5, 0, 0.5, 0),
             BackgroundTransparency = 1
         }):Play()
         task.wait(0.4)
-        loadingScreen:Destroy()
+        loadRoot:Destroy()
         Main.Visible = true
         Main.Size = UDim2.new(0, 0, 0, 0)
         Main.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -1477,4 +1548,4 @@ task.spawn(function()
     end
 end)
 
-print("Spent Hub v3.0 loaded | Silent Aim + ESP + Whitelist + Keybinds + Premium UI")
+print("Spent Hub v5.0 loaded | Silent Aim (untouched) + ESP + Whitelist + Premium GUI")
