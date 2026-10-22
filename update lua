@@ -21,7 +21,8 @@ getgenv().SilentAimSettings = SilentAimSettings
 local ESPSettings = {
     Enabled = false,
     Box = true, Name = true, Health = true, Distance = true,
-    Tracer = false, Skeleton = false,
+    Tracer = false, Skeleton = false, Highlight = false,
+    TeamColor = true,
     MaxDistance = 1000,
     Color = Color3.fromRGB(255, 182, 213),
     TeamCheck = true,
@@ -39,7 +40,6 @@ local Whitelist = {}
 local WhitelistIds = {}
 
 local MainFileName = "UniversalSilentAim"
-local FileToSave = ""
 local Camera = workspace.CurrentCamera
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -47,6 +47,8 @@ local GuiService = game:GetService("GuiService")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local StarterGui = game:GetService("StarterGui")
 local LocalPlayer = Players.LocalPlayer
 local Mouse = LocalPlayer:GetMouse()
 local GetPlayers = Players.GetPlayers
@@ -67,23 +69,22 @@ local isMobile = hasTouch and not hasKeyboard
 local isPC = hasKeyboard and hasMouse
 local isHybrid = hasTouch and hasKeyboard and hasMouse
 
--- Drawings
 local mouse_box = Drawing.new("Square")
 mouse_box.Visible = false
 mouse_box.ZIndex = 999
 mouse_box.Color = Color3.fromRGB(255, 182, 213)
-mouse_box.Thickness = 2
-mouse_box.Size = Vector2.new(24, 24)
-mouse_box.Filled = false
+mouse_box.Thickness = 20
+mouse_box.Size = Vector2.new(20, 20)
+mouse_box.Filled = true
 
 local fov_circle = Drawing.new("Circle")
-fov_circle.Thickness = 1.5
+fov_circle.Thickness = 1
 fov_circle.NumSides = 100
 fov_circle.Radius = 130
 fov_circle.Filled = false
 fov_circle.Visible = false
 fov_circle.ZIndex = 999
-fov_circle.Transparency = 0.85
+fov_circle.Transparency = 1
 fov_circle.Color = Color3.fromRGB(255, 182, 213)
 
 local ESPDrawings = {}
@@ -101,7 +102,6 @@ local function CalculateChance(Percentage)
     return chance <= Percentage / 100
 end
 
--- File handling
 if not isfolder(MainFileName) then makefolder(MainFileName) end
 if not isfolder(string.format("%s/%s", MainFileName, tostring(game.PlaceId))) then
     makefolder(string.format("%s/%s", MainFileName, tostring(game.PlaceId)))
@@ -152,10 +152,15 @@ end
 
 local function getDirection(Origin, Position) return (Position - Origin).Unit * 1000 end
 
+-- FOV circle uses Averiias original offset (raw mouse position, no GuiInset)
+local function getMousePosition()
+    return GetMouseLocation(UserInputService)
+end
+
 local function getAimPosition()
     if hasMouse then
         local mp = GetMouseLocation(UserInputService)
-        return Vector2.new(mp.X, mp.Y + GuiService:GetGuiInset().Y)
+        return Vector2.new(mp.X, mp.Y)
     elseif hasTouch then
         local touches = UserInputService:GetTouches()
         if #touches > 0 then return Vector2.new(touches[1].Position.X, touches[1].Position.Y) end
@@ -238,36 +243,72 @@ local function resetESPDrawings(d, visible)
     for _, line in pairs(d.skeletonLines) do line.Visible = visible end
 end
 
+local function getESPColor(player)
+    if ESPSettings.TeamColor and player.Team then
+        return player.Team.TeamColor.Color
+    end
+    return ESPSettings.Color
+end
+
+local HighlightCache = {}
+
+local function updateHighlight(player, char, enabled)
+    if not ESPSettings.Highlight or not enabled then
+        if HighlightCache[player] then
+            HighlightCache[player]:Destroy()
+            HighlightCache[player] = nil
+        end
+        return
+    end
+    if not HighlightCache[player] then
+        local hl = Instance.new("Highlight")
+        hl.Name = "SpentHubHL"
+        hl.FillTransparency = 0.7
+        hl.OutlineTransparency = 0.2
+        hl.Parent = char
+        HighlightCache[player] = hl
+    end
+    local hl = HighlightCache[player]
+    hl.Adornee = char
+    hl.FillColor = getESPColor(player)
+    hl.OutlineColor = getESPColor(player)
+end
+
 local function updateESPPlayer(player)
     local d = ESPDrawings[player]
     if not d then d = createESPDrawings(); ESPDrawings[player] = d end
     local char = player.Character
-    if not char then resetESPDrawings(d, false); return end
-    if ESPSettings.TeamCheck and player.Team == LocalPlayer.Team then resetESPDrawings(d, false); return end
-    if IsWhitelisted(player) then resetESPDrawings(d, false); return end
+    if not char then resetESPDrawings(d, false); updateHighlight(player, nil, false); return end
+    if ESPSettings.TeamCheck and player.Team == LocalPlayer.Team then resetESPDrawings(d, false); updateHighlight(player, char, false); return end
+    if IsWhitelisted(player) then resetESPDrawings(d, false); updateHighlight(player, char, false); return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     local hum = char:FindFirstChildOfClass("Humanoid")
     local head = char:FindFirstChild("Head")
-    if not hrp or not hum or hum.Health <= 0 or not head then resetESPDrawings(d, false); return end
+    if not hrp or not hum or hum.Health <= 0 or not head then resetESPDrawings(d, false); updateHighlight(player, char, false); return end
     local camPos = Camera.CFrame.Position
     local dist = (hrp.Position - camPos).Magnitude
-    if dist > ESPSettings.MaxDistance then resetESPDrawings(d, false); return end
+    if dist > ESPSettings.MaxDistance then resetESPDrawings(d, false); updateHighlight(player, char, false); return end
     local topScreen, topOn = WorldToViewportPoint(Camera, head.Position + Vector3.new(0, 0.5, 0))
     local bottomScreen, bottomOn = WorldToViewportPoint(Camera, hrp.Position - Vector3.new(0, 3, 0))
-    if not topOn or not bottomOn then resetESPDrawings(d, false); return end
+    if not topOn or not bottomOn then resetESPDrawings(d, false); updateHighlight(player, char, false); return end
     local height = math.abs(topScreen.Y - bottomScreen.Y)
     local width = height * 0.6
     local x = topScreen.X - width / 2
     local y = topScreen.Y
-    if height <= 0 or height > 5000 then resetESPDrawings(d, false); return end
+    if height <= 0 or height > 5000 then resetESPDrawings(d, false); updateHighlight(player, char, false); return end
+
+    local color = getESPColor(player)
+
+    updateHighlight(player, char, true)
+
     d.box.Visible = ESPSettings.Box
-    d.box.Color = ESPSettings.Color
+    d.box.Color = color
     d.box.Thickness = 1
     d.box.Filled = false
     d.box.Size = Vector2.new(width, height)
     d.box.Position = Vector2.new(x, y)
     d.name.Visible = ESPSettings.Name
-    d.name.Color = ESPSettings.Color
+    d.name.Color = color
     d.name.Size = 13
     d.name.Center = true
     d.name.Outline = true
@@ -288,7 +329,7 @@ local function updateESPPlayer(player)
     d.healthBar.Size = Vector2.new(3, height * hp)
     d.healthBar.Position = Vector2.new(x - 7, y + height * (1 - hp))
     d.distance.Visible = ESPSettings.Distance
-    d.distance.Color = Color3.fromRGB(255, 200, 220)
+    d.distance.Color = color
     d.distance.Size = 11
     d.distance.Center = true
     d.distance.Outline = true
@@ -297,7 +338,7 @@ local function updateESPPlayer(player)
     d.distance.Position = Vector2.new(topScreen.X, y + height + 2)
     if ESPSettings.Tracer then
         d.tracer.Visible = true
-        d.tracer.Color = ESPSettings.Color
+        d.tracer.Color = color
         d.tracer.Thickness = 1
         d.tracer.Transparency = 0.5
         d.tracer.From = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y)
@@ -320,7 +361,7 @@ local function updateESPPlayer(player)
                 local bPos, bOn = WorldToViewportPoint(Camera, b.Position)
                 if aOn and bOn then
                     line.Visible = true
-                    line.Color = ESPSettings.Color
+                    line.Color = color
                     line.Thickness = 1
                     line.Transparency = 0.3
                     line.From = Vector2.new(aPos.X, aPos.Y)
@@ -334,6 +375,10 @@ end
 local function cleanupAllESP()
     for player, d in pairs(ESPdrawings or {}) do cleanupESPDrawings(d) end
     ESPdrawings = {}
+    for player, hl in pairs(HighlightCache) do
+        if hl then hl:Destroy() end
+    end
+    HighlightCache = {}
 end
 
 local lastESPRender = 0
@@ -345,9 +390,9 @@ local T = {
     Panel = Color3.fromRGB(20, 17, 24),
     PanelLight = Color3.fromRGB(30, 25, 35),
     PanelHover = Color3.fromRGB(40, 33, 47),
-    Accent = Color3.fromRGB(255, 182, 213),      -- light pink
-    Accent2 = Color3.fromRGB(255, 140, 190),     -- deeper pink
-    Accent3 = Color3.fromRGB(255, 200, 225),     -- pale pink
+    Accent = Color3.fromRGB(255, 182, 213),
+    Accent2 = Color3.fromRGB(255, 140, 190),
+    Accent3 = Color3.fromRGB(255, 200, 225),
     Text = Color3.fromRGB(250, 245, 250),
     TextDim = Color3.fromRGB(160, 150, 165),
     Green = Color3.fromRGB(180, 230, 200),
@@ -366,7 +411,6 @@ local function calcSize()
 end
 local uiW, uiH, isLandscape = calcSize()
 
--- ================= ROOT GUI =================
 local SG = Instance.new("ScreenGui")
 SG.Name = "SpentHub"
 SG.ResetOnSpawn = false
@@ -374,127 +418,22 @@ SG.IgnoreGuiInset = true
 SG.DisplayOrder = 999
 SG.Parent = game:GetService("CoreGui")
 
--- ================= LOADING SCREEN =================
-local loadRoot = Instance.new("Frame")
-loadRoot.Size = UDim2.new(0, uiW, 0, uiH)
-loadRoot.Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
-loadRoot.BackgroundColor3 = T.Bg
-loadRoot.BorderSizePixel = 0
-loadRoot.ZIndex = 100
-loadRoot.Parent = SG
-Instance.new("UICorner", loadRoot).CornerRadius = CORNER
-local loadStroke = Instance.new("UIStroke", loadRoot)
-loadStroke.Color = T.Accent
-loadStroke.Thickness = 1
-loadStroke.Transparency = 0.4
+-- ================= ROBLOX NOTIFICATION LOADING =================
+-- Replaces custom loading screen with Roblox built-in notification
+local function robloxNotify(title, text, duration)
+    duration = duration or 3
+    pcall(function()
+        StarterGui:SetCore("SendNotification", {
+            Title = title,
+            Text = text,
+            Duration = duration
+        })
+    end)
+end
 
-local loadGlow = Instance.new("Frame")
-loadGlow.Size = UDim2.new(1, 30, 1, 30)
-loadGlow.Position = UDim2.new(0, -15, 0, -15)
-loadGlow.BackgroundColor3 = T.Accent
-loadGlow.BackgroundTransparency = 0.8
-loadGlow.BorderSizePixel = 0
-loadGlow.ZIndex = 99
-loadGlow.Parent = loadRoot
-Instance.new("UICorner", loadGlow).CornerRadius = UDim.new(0, 24)
-TweenService:Create(loadGlow, TweenInfo.new(1.8, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
-    {BackgroundTransparency = 0.5, Size = UDim2.new(1, 44, 1, 44), Position = UDim2.new(0, -22, 0, -22)}):Play()
+robloxNotify("Spent Hub", "Loading. Please wait for 5 seconds.", 5)
 
-local loadRing = Instance.new("Frame")
-loadRing.Size = UDim2.new(0, 80, 0, 80)
-loadRing.Position = UDim2.new(0.5, -40, 0.5, -100)
-loadRing.BackgroundTransparency = 1
-loadRing.ZIndex = 101
-loadRing.Parent = loadRoot
-local ringStroke = Instance.new("UIStroke", loadRing)
-ringStroke.Color = T.Accent
-ringStroke.Thickness = 3
-ringStroke.Transparency = 0.15
-Instance.new("UICorner", loadRing).CornerRadius = UDim.new(1, 0)
-
-local loadTitle = Instance.new("TextLabel")
-loadTitle.Size = UDim2.new(1, 0, 0, 32)
-loadTitle.Position = UDim2.new(0, 0, 0.5, -20)
-loadTitle.Text = ""
-loadTitle.TextColor3 = T.Accent
-loadTitle.BackgroundTransparency = 1
-loadTitle.Font = Enum.Font.GothamBlack
-loadTitle.TextSize = 22
-loadTitle.ZIndex = 101
-loadTitle.Parent = loadRoot
-
-local loadSub = Instance.new("TextLabel")
-loadSub.Size = UDim2.new(1, 0, 0, 20)
-loadSub.Position = UDim2.new(0, 0, 0.5, 16)
-loadSub.Text = "Loading..."
-loadSub.TextColor3 = T.TextDim
-loadSub.BackgroundTransparency = 1
-loadSub.Font = Enum.Font.Gotham
-loadSub.TextSize = 11
-loadSub.ZIndex = 101
-loadSub.Parent = loadRoot
-
-local loadBar = Instance.new("Frame")
-loadBar.Size = UDim2.new(0, 260, 0, 4)
-loadBar.Position = UDim2.new(0.5, -130, 0.5, 58)
-loadBar.BackgroundColor3 = T.PanelLight
-loadBar.BorderSizePixel = 0
-loadBar.ZIndex = 101
-loadBar.Parent = loadRoot
-Instance.new("UICorner", loadBar).CornerRadius = UDim.new(1, 0)
-
-local loadFill = Instance.new("Frame")
-loadFill.Size = UDim2.new(0, 0, 1, 0)
-loadFill.BackgroundColor3 = T.Accent
-loadFill.BorderSizePixel = 0
-loadFill.ZIndex = 102
-loadFill.Parent = loadBar
-Instance.new("UICorner", loadFill).CornerRadius = UDim.new(1, 0)
-local loadFillGrad = Instance.new("UIGradient")
-loadFillGrad.Color = ColorSequence.new(T.Accent3, T.Accent, T.Accent2)
-loadFillGrad.Parent = loadFill
-
-local loadPct = Instance.new("TextLabel")
-loadPct.Size = UDim2.new(1, 0, 0, 20)
-loadPct.Position = UDim2.new(0, 0, 0.5, 72)
-loadPct.Text = "0%"
-loadPct.TextColor3 = T.Accent
-loadPct.BackgroundTransparency = 1
-loadPct.Font = Enum.Font.GothamBold
-loadPct.TextSize = 12
-loadPct.ZIndex = 101
-loadPct.Parent = loadRoot
-
-task.spawn(function()
-    local txt = "SPENT HUB"
-    while loadTitle.Parent and loadTitle.Text ~= txt do
-        for i = 1, #txt do
-            loadTitle.Text = txt:sub(1, i)
-            task.wait(0.04)
-        end
-    end
-end)
-
-task.spawn(function()
-    local rot = 0
-    while loadRing.Parent do
-        rot = (rot + 5) % 360
-        loadRing.Rotation = rot
-        task.wait(0.016)
-    end
-end)
-
-task.spawn(function()
-    local start = tick()
-    while loadFill.Parent and tick() - start < 5 do
-        local p = math.min(1, (tick() - start) / 5)
-        loadFill.Size = UDim2.new(p, 0, 1, 0)
-        loadPct.Text = math.floor(p * 100) .. "%"
-        task.wait(0.05)
-    end
-end)
-
--- ================= NOTIFICATIONS =================
+-- ================= NOTIFICATIONS (custom for toggles) =================
 local notifContainer = Instance.new("Frame")
 notifContainer.Size = UDim2.new(0, 340, 1, -80)
 notifContainer.Position = UDim2.new(1, -360, 0, 60)
@@ -590,7 +529,6 @@ stroke.Color = T.StrokeLight
 stroke.Thickness = 1
 stroke.Transparency = 0.3
 
--- gradient border
 local borderGradFrame = Instance.new("Frame")
 borderGradFrame.Size = UDim2.new(1, 4, 1, 4)
 borderGradFrame.Position = UDim2.new(0, -2, 0, -2)
@@ -611,7 +549,6 @@ task.spawn(function()
     end
 end)
 
--- aurora
 local aurora = Instance.new("Frame")
 aurora.Size = UDim2.new(1, 0, 1, 0)
 aurora.BackgroundColor3 = T.Bg
@@ -636,7 +573,6 @@ task.spawn(function()
     end
 end)
 
--- scanlines
 local scan = Instance.new("Frame")
 scan.Size = UDim2.new(1, 0, 1, 0)
 scan.BackgroundTransparency = 1
@@ -655,7 +591,6 @@ for i = 0, 60 do
     line.Parent = scan
 end
 
--- noise
 local noise = Instance.new("Frame")
 noise.Size = UDim2.new(1, 0, 1, 0)
 noise.BackgroundTransparency = 1
@@ -674,7 +609,6 @@ for i = 1, 160 do
     dot.Parent = noise
 end
 
--- light sweep
 local sweep = Instance.new("Frame")
 sweep.Size = UDim2.new(0.18, 0, 1.6, 0)
 sweep.Position = UDim2.new(-0.4, 0, -0.3, 0)
@@ -693,7 +627,6 @@ task.spawn(function()
     end
 end)
 
--- cursor spotlight
 local spotlight = Instance.new("Frame")
 spotlight.Size = UDim2.new(0, 340, 0, 340)
 spotlight.BackgroundColor3 = T.Accent
@@ -702,6 +635,21 @@ spotlight.BorderSizePixel = 0
 spotlight.ZIndex = 3
 spotlight.Parent = Main
 Instance.new("UICorner", spotlight).CornerRadius = UDim.new(1, 0)
+
+-- extra: floating corner particles (2 decorative dots)
+for i = 1, 2 do
+    local fp = Instance.new("Frame")
+    fp.Size = UDim2.new(0, 6, 0, 6)
+    fp.Position = i == 1 and UDim2.new(0, 30, 0, 30) or UDim2.new(1, -36, 1, -36)
+    fp.BackgroundColor3 = T.Accent
+    fp.BackgroundTransparency = 0.4
+    fp.BorderSizePixel = 0
+    fp.ZIndex = 4
+    fp.Parent = Main
+    Instance.new("UICorner", fp).CornerRadius = UDim.new(1, 0)
+    TweenService:Create(fp, TweenInfo.new(1.5 + i * 0.3, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut, -1, true),
+        {BackgroundTransparency = 0.85, Size = UDim2.new(0, 10, 0, 10)}):Play()
+end
 
 -- TITLE BAR
 local Title = Instance.new("Frame")
@@ -802,7 +750,6 @@ Title.InputChanged:Connect(function(i)
 end)
 Title.InputEnded:Connect(function() dragging = false end)
 
--- parallax
 UserInputService.InputChanged:Connect(function(i)
     if i.UserInputType ~= Enum.UserInputType.MouseMovement then return end
     local absX, absY = Main.AbsolutePosition.X, Main.AbsolutePosition.Y
@@ -884,9 +831,12 @@ local function makePage()
     s.Position = UDim2.new(0, 8, 0, 8)
     s.BackgroundTransparency = 1
     s.BorderSizePixel = 0
-    s.ScrollBarThickness = 4
+    s.ScrollBarThickness = 6
     s.ScrollBarImageColor3 = T.Accent
     s.CanvasSize = UDim2.new(0, 0, 0, 0)
+    s.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    s.ScrollingDirection = Enum.ScrollingDirection.Y
+    s.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
     s.Visible = false
     s.ZIndex = 6
     s.Parent = Pages
@@ -1298,8 +1248,19 @@ newToggle(ESPPage, "Health ESP", 5, true, function(v) ESPSettings.Health = v end
 newToggle(ESPPage, "Distance ESP", 6, true, function(v) ESPSettings.Distance = v end)
 newToggle(ESPPage, "Tracer ESP", 7, false, function(v) ESPSettings.Tracer = v end)
 newToggle(ESPPage, "Skeleton ESP", 8, false, function(v) ESPSettings.Skeleton = v end)
-newToggle(ESPPage, "ESP Team Check", 9, true, function(v) ESPSettings.TeamCheck = v end)
-newSlider(ESPPage, "ESP Max Distance", 100, 5000, 1000, 10, function(v) ESPSettings.MaxDistance = v end)
+newToggle(ESPPage, "Highlight ESP", 9, false, function(v)
+    ESPSettings.Highlight = v
+    notify("Highlight", v and "Enabled" or "Disabled", v and "success" or "error")
+    if not v then
+        for player, hl in pairs(HighlightCache) do
+            if hl then hl:Destroy() end
+            HighlightCache[player] = nil
+        end
+    end
+end)
+newToggle(ESPPage, "Team Color ESP", 10, true, function(v) ESPSettings.TeamColor = v end)
+newToggle(ESPPage, "ESP Team Check", 11, true, function(v) ESPSettings.TeamCheck = v end)
+newSlider(ESPPage, "ESP Max Distance", 100, 5000, 1000, 12, function(v) ESPSettings.MaxDistance = v end)
 
 -- CONFIG
 newLabel(ConfigPage, "CONFIGURATION", 1, true)
@@ -1369,13 +1330,10 @@ loadBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- ================= FIXED KEYBINDS =================
--- Uses UserInputService.InputBegan with gameProcessedEvent check
--- Reads current KeybindSettings values directly (no stale references)
+-- FIXED KEYBINDS
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
     if gameProcessed then return end
     if not input.KeyCode or input.KeyCode == Enum.KeyCode.Unknown then return end
-
     local kc = input.KeyCode
     if kc == KeybindSettings.SilentAim then
         SilentAimSettings.Enabled = not SilentAimSettings.Enabled
@@ -1411,7 +1369,7 @@ RenderStepped:Connect(function()
     if SilentAimSettings.FOVVisible then
         fov_circle.Visible = true
         fov_circle.Color = T.Accent
-        fov_circle.Position = getAimPosition()
+        fov_circle.Position = getMousePosition()
     else
         fov_circle.Visible = false
     end
@@ -1421,6 +1379,10 @@ end)
 Heartbeat:Connect(function()
     if not ESPSettings.Enabled then
         for _, d in pairs(ESPdrawings or {}) do resetESPDrawings(d, false) end
+        for player, hl in pairs(HighlightCache) do
+            if hl then hl:Destroy() end
+        end
+        HighlightCache = {}
         return
     end
     local now = tick()
@@ -1437,7 +1399,7 @@ Heartbeat:Connect(function()
     end
 end)
 
--- ================= SILENT AIM HOOKS (UNTOUCHED) =================
+-- SILENT AIM HOOKS (UNTOUCHED)
 local oldNamecall
 oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(...)
     local Method = getnamecallmethod()
@@ -1503,7 +1465,6 @@ oldIndex = hookmetamethod(game, "__index", newcclosure(function(self, Index)
     return oldIndex(self, Index)
 end))
 
--- re-layout
 Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     local newW, newH, land = calcSize()
     uiW, uiH, isLandscape = newW, newH, land
@@ -1512,26 +1473,17 @@ Camera:GetPropertyChangedSignal("ViewportSize"):Connect(function()
     fullSize = UDim2.new(0, uiW, 0, uiH)
 end)
 
--- loading -> show hub
+-- After 5 seconds: show main window + Roblox notification
 task.spawn(function()
     task.wait(5)
-    if loadRoot.Parent then
-        notify("Spent Hub", "Loaded successfully | " .. (isPC and "PC" or isMobile and "Mobile" or "Hybrid"), "success")
-        TweenService:Create(loadRoot, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, 0, 0, 0),
-            Position = UDim2.new(0.5, 0, 0.5, 0),
-            BackgroundTransparency = 1
-        }):Play()
-        task.wait(0.4)
-        loadRoot:Destroy()
-        Main.Visible = true
-        Main.Size = UDim2.new(0, 0, 0, 0)
-        Main.Position = UDim2.new(0.5, 0, 0.5, 0)
-        TweenService:Create(Main, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-            Size = fullSize,
-            Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
-        }):Play()
-    end
+    Main.Visible = true
+    Main.Size = UDim2.new(0, 0, 0, 0)
+    Main.Position = UDim2.new(0.5, 0, 0.5, 0)
+    TweenService:Create(Main, TweenInfo.new(0.6, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
+        Size = fullSize,
+        Position = UDim2.new(0.5, -uiW/2, 0.5, -uiH/2)
+    }):Play()
+    robloxNotify("Spent Hub", "Spent Hub loaded.", 4)
 end)
 
-print("Spent Hub v6.0 loaded | Pink accent | Silent aim untouched | Fixed keybinds")
+print("Spent Hub v7.0 loaded | FOV Averiias offset | Team color ESP | Highlight ESP | Fixed keybinds | Scrollable")
