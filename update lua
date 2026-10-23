@@ -1,22 +1,3 @@
-mod made by Topiskai
-
----
-
-topfsc:
-
-```lua
---[[
-    SPENT HUB V1.0 - ULTIMATE PRISON LIFE EDITION
-    Universal Silent Aim (Averiias core preserved) + Premium Glassmorphism GUI
-    Lua/Luau for Roblox - PC & Mobile
-    NO EDUCATIONAL PURPOSES
-    Silent Aim core: Averiias, Stefanuk12, xaxa
-    GUI & ESP: Spent Hub
-]]
-
--- ============================================================
--- INIT
--- ============================================================
 if not game:IsLoaded() then game.Loaded:Wait() end
 if not syn or not protectgui then getgenv().protectgui = function() end end
 
