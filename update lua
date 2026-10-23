@@ -1982,5 +1982,3 @@ task.delay(0.4, function()
     notify("RMB aim · RAlt toggle · RShift GUI", Theme.TEXT_DIM)
 end)
 print("SPENT HUB v15.2 loaded.")
-4. Removed old isGuardOrCriminal / isInmate gating — flag check now works directly on the character attributes regardless of which team the local player is on, so it won't silently fail if your local team name differs.
-5. Title bumped to v15.2 and Info tab updated to document the team-detection fix.
