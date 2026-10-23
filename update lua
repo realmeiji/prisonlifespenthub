@@ -295,15 +295,38 @@ local function getTeamColor(player)
     return Color3.fromRGB(255, 182, 193)
 end
 
-local function isGuardOrCriminal(plr)
-    if not plr.Team then return false end
-    local n = plr.Team.Name
-    return n == "Guards" or n == "Criminals"
+-- ============ FIXED TEAM DETECTION ============
+local TEAM_NAMES = {
+    Guard    = {"Guards", "Guard", "Police", "Cop", "Cops"},
+    Inmate   = {"Inmates", "Inmate", "Prisoner", "Prisoners"},
+    Criminal = {"Criminals", "Criminal", "Convict", "Convicts"},
+}
+
+local function teamMatchesKind(teamName, kind)
+    for _, name in ipairs(TEAM_NAMES[kind]) do
+        if teamName == name then return true end
+    end
+    return false
 end
 
-local function isInmate(plr)
-    if not plr.Team then return false end
-    return plr.Team.Name == "Inmates"
+local function getTeamKind(plr)
+    if not plr.Team then
+        local char = plr.Character
+        if char then
+            local attr = char:GetAttribute("Team") or char:GetAttribute("Role")
+            if type(attr) == "string" then
+                if teamMatchesKind(attr, "Guard") then return "Guard" end
+                if teamMatchesKind(attr, "Inmate") then return "Inmate" end
+                if teamMatchesKind(attr, "Criminal") then return "Criminal" end
+            end
+        end
+        return nil
+    end
+    local n = plr.Team.Name
+    if teamMatchesKind(n, "Guard") then return "Guard" end
+    if teamMatchesKind(n, "Inmate") then return "Inmate" end
+    if teamMatchesKind(n, "Criminal") then return "Criminal" end
+    return nil
 end
 
 local function getHostileState(plr)
@@ -315,44 +338,29 @@ local function getHostileState(plr)
 end
 
 local function matchesTeam(Player)
-    local teamName = Player.Team and Player.Team.Name or ""
+    local kind = getTeamKind(Player)
+    local hostile, trespass = getHostileState(Player)
 
-    -- Base team toggles
-    local teamOk = true
-    if teamName == "Guards"    and not SilentAimSettings.TargetCop      then teamOk = false end
-    if teamName == "Inmates"   and not SilentAimSettings.TargetInmate   then teamOk = false end
-    if teamName == "Criminals" and not SilentAimSettings.TargetCriminal then teamOk = false end
+    local allowGuard    = SilentAimSettings.TargetCop
+    local allowInmate   = SilentAimSettings.TargetInmate
+    local allowCriminal = SilentAimSettings.TargetCriminal
+    local allowHostile  = SilentAimSettings.TargetHostile
+    local allowTrespass = SilentAimSettings.TargetTrespassing
 
-    -- Hostile / Trespassing attribute checks
-    -- Rule from LocalScript: only Guards/Criminals can be flagged Hostile/Trespassing vs Inmates
-    local flagOk = false
-    if isGuardOrCriminal(Player) and isInmate(LocalPlayer) then
-        local hostile, trespass = getHostileState(Player)
-        if SilentAimSettings.TargetHostile     and hostile  then flagOk = true end
-        if SilentAimSettings.TargetTrespassing and trespass then flagOk = true end
-    end
-
-    -- Allow flags regardless of team direction as fallback
-    if not flagOk then
-        local hostile, trespass = getHostileState(Player)
-        if SilentAimSettings.TargetHostile     and hostile  then flagOk = true end
-        if SilentAimSettings.TargetTrespassing and trespass then flagOk = true end
-    end
-
-    local anyTeamFilter = SilentAimSettings.TargetCop or SilentAimSettings.TargetInmate or SilentAimSettings.TargetCriminal
-    local anyFlagFilter = SilentAimSettings.TargetHostile or SilentAimSettings.TargetTrespassing
-
-    if not anyTeamFilter and not anyFlagFilter then
+    if not (allowGuard or allowInmate or allowCriminal or allowHostile or allowTrespass) then
         return true
     end
 
-    -- Pass if EITHER team matches OR a flag matches
-    local teamMatch = (teamName == "Guards"    and SilentAimSettings.TargetCop)      or
-                      (teamName == "Inmates"   and SilentAimSettings.TargetInmate)   or
-                      (teamName == "Criminals" and SilentAimSettings.TargetCriminal)
+    if allowHostile and hostile then return true end
+    if allowTrespass and trespass then return true end
 
-    return (teamOk and teamMatch) or flagOk
+    if kind == "Guard"    and allowGuard    then return true end
+    if kind == "Inmate"   and allowInmate   then return true end
+    if kind == "Criminal" and allowCriminal then return true end
+
+    return false
 end
+-- ============ END FIXED TEAM DETECTION ============
 
 local function getClosestPlayer()
     if not SilentAimSettings.TargetPart then return end
@@ -695,7 +703,7 @@ local title = Instance.new("TextLabel", titleBar)
 title.Size = UDim2.new(1, -240, 1, 0)
 title.Position = UDim2.new(0, 50, 0, 0)
 title.BackgroundTransparency = 1
-title.Text = "SPENT HUB · v15.1"
+title.Text = "SPENT HUB · v15.2"
 title.TextColor3 = Theme.TEXT_STRONG
 title.Font = Enum.Font.GothamBold
 title.TextSize = 14
@@ -768,8 +776,7 @@ searchBox.Font = Enum.Font.Gotham
 searchBox.TextSize = 10
 searchBox.BorderSizePixel = 0
 searchBox.ClearTextOnFocus = false
-searchBox.ZIndex = 102
-Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0.4, 0)
+searchBox.ZIndex = 102Instance.new("UICorner", searchBox).CornerRadius = UDim.new(0.4, 0)
 
 local sidebar = Instance.new("Frame", main)
 sidebar.Size = UDim2.new(0, 140, 1, -100)
@@ -898,7 +905,6 @@ local notifLayout = Instance.new("UIListLayout", notifFrame)
 notifLayout.Padding = UDim.new(0, 8)
 notifLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
--- Icon map per notification kind
 local NOTIF_ICON = {
     on = "+",
     off = "×",
@@ -939,13 +945,11 @@ local function notify(text, color)
         local remaining = LIFETIME
         local lastTick = tick()
 
-        -- wrapper
         local wrap = Instance.new("Frame", notifFrame)
         wrap.Size = UDim2.new(1, 0, 0, 44)
         wrap.BackgroundTransparency = 1
         wrap.ZIndex = 501
 
-        -- shadow layer
         local shadowCard = Instance.new("Frame", wrap)
         shadowCard.Size = UDim2.new(1, 0, 1, 0)
         shadowCard.Position = UDim2.new(0, 2, 0, 2)
@@ -955,7 +959,6 @@ local function notify(text, color)
         shadowCard.ZIndex = 501
         Instance.new("UICorner", shadowCard).CornerRadius = UDim.new(0.15, 0)
 
-        -- card
         local card = Instance.new("Frame", wrap)
         card.Size = UDim2.new(1, 0, 1, 0)
         card.BackgroundColor3 = Theme.BG_OPT
@@ -975,7 +978,6 @@ local function notify(text, color)
         glow.Transparency = 0.85
         Instance.new("UICorner", glow).CornerRadius = UDim.new(0.15, 0)
 
-        -- left accent bar
         local bar = Instance.new("Frame", card)
         bar.Size = UDim2.new(0, 3, 1, -8)
         bar.Position = UDim2.new(0, 4, 0, 4)
@@ -984,7 +986,6 @@ local function notify(text, color)
         bar.ZIndex = 503
         Instance.new("UICorner", bar).CornerRadius = UDim.new(1, 0)
 
-        -- icon circle
         local iconCircle = Instance.new("Frame", card)
         iconCircle.Size = UDim2.new(0, 22, 0, 22)
         iconCircle.Position = UDim2.new(0, 12, 0.5, -11)
@@ -1003,7 +1004,6 @@ local function notify(text, color)
         iconLabel.TextSize = 13
         iconLabel.ZIndex = 504
 
-        -- message
         local lbl = Instance.new("TextLabel", card)
         lbl.Size = UDim2.new(1, -50, 1, -6)
         lbl.Position = UDim2.new(0, 42, 0, 0)
@@ -1016,7 +1016,6 @@ local function notify(text, color)
         lbl.TextYAlignment = Enum.TextYAlignment.Center
         lbl.ZIndex = 503
 
-        -- progress track
         local progressTrack = Instance.new("Frame", card)
         progressTrack.Size = UDim2.new(1, -12, 0, 2)
         progressTrack.Position = UDim2.new(0, 6, 1, -5)
@@ -1032,7 +1031,6 @@ local function notify(text, color)
         progressFill.ZIndex = 504
         Instance.new("UICorner", progressFill).CornerRadius = UDim.new(1, 0)
 
-        -- slide in with spring
         wrap.Position = UDim2.new(1.15, 0, 0, 0)
         wrap.BackgroundTransparency = 1
         card.BackgroundTransparency = 1
@@ -1051,7 +1049,6 @@ local function notify(text, color)
         TweenService:Create(iconLabel, TweenInfo.new(0.2), {TextTransparency = 0}):Play()
         TweenService:Create(bar, TweenInfo.new(0.2), {BackgroundTransparency = 0}):Play()
 
-        -- countdown loop with hover pause
         local dying = false
         local function destroyNotif()
             if dying then return end
@@ -1378,7 +1375,7 @@ local function buildMain()
     makeToggle("Target Hostile", SilentAimSettings.TargetHostile, function(s)
         SilentAimSettings.TargetHostile = s
         notify("Target Hostile: " .. tostring(s), Theme.ACCENT)
-    end, "Aim at players flagged Hostile (Guard/Criminal vs Inmate)")
+    end, "Aim at players flagged Hostile")
     makeToggle("Target Trespassing", SilentAimSettings.TargetTrespassing, function(s)
         SilentAimSettings.TargetTrespassing = s
         notify("Target Trespassing: " .. tostring(s), Theme.ACCENT)
@@ -1524,7 +1521,7 @@ local function buildInfo()
     info.TextXAlignment = Enum.TextXAlignment.Left
     info.TextYAlignment = Enum.TextYAlignment.Top
     info.Text = [[
- 거 SPENT HUB v15.1
+ 거 SPENT HUB v15.2
 
  Hold RMB to aim (toggle RAlt)
  GUI toggle: RightShift
@@ -1543,11 +1540,13 @@ local function buildInfo()
    Inmates   → Target Inmate toggle
    Criminals → Target Criminal toggle
    Hostile   → Target Hostile toggle
-               (Guards/Criminals flagged
-                Hostile vs Inmates)
    Trespass  → Target Trespassing toggle
-               (Guards/Criminals flagged
-                Trespassing vs Inmates)
+
+ Team Detection Fix:
+   Handles both "Guard" and
+   "Guards" name variants.
+   Fallback to Character attributes
+   Team / Role if Team object nil.
 
  Target Lock Feedback:
    FOV ring white when idle
@@ -1978,8 +1977,10 @@ selectTab("main")
 main.Visible = true
 shadow.Visible = true
 openState = "open"
-notify("SPENT HUB v15.1 loaded", Theme.ACCENT)
+notify("SPENT HUB v15.2 loaded", Theme.ACCENT)
 task.delay(0.4, function()
     notify("RMB aim · RAlt toggle · RShift GUI", Theme.TEXT_DIM)
 end)
-print("SPENT HUB v15.1 loaded.")
+print("SPENT HUB v15.2 loaded.")
+4. Removed old isGuardOrCriminal / isInmate gating — flag check now works directly on the character attributes regardless of which team the local player is on, so it won't silently fail if your local team name differs.
+5. Title bumped to v15.2 and Info tab updated to document the team-detection fix.
