@@ -1245,4 +1245,3 @@ task.wait(5)
 pcall(function()
     StarterGui:SetCore("SendNotification", {Title = "Spent Hub", Text = "Spent Hub Loaded", Duration = 5})
 end)
-```
